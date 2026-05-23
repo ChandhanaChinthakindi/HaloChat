@@ -148,4 +148,40 @@ router.post(
   }
 );
 
+router.get("/companion/tts", async (req, res) => {
+  const text = req.query.text as string;
+  const voice = (req.query.voice as string) || "nova";
+
+  if (!text || !text.trim()) {
+    res.status(400).json({ error: "text required" });
+    return;
+  }
+
+  if (!process.env["OPENAI_API_KEY"]) {
+    res.status(503).json({ error: "API key not configured" });
+    return;
+  }
+
+  const validVoices = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer"];
+  const safeVoice = validVoices.includes(voice) ? voice : "nova";
+
+  try {
+    const mp3 = await openai.audio.speech.create({
+      model: "tts-1",
+      voice: safeVoice as any,
+      input: text.slice(0, 4096),
+      response_format: "mp3",
+    });
+
+    const buffer = Buffer.from(await mp3.arrayBuffer());
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Content-Length", buffer.length);
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.send(buffer);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || "TTS failed" });
+  }
+});
+
 export default router;

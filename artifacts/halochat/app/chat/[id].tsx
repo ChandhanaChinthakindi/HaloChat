@@ -45,12 +45,8 @@ export default function ChatScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const {
-    companions,
-    getMessages,
-    addMessage,
-    updateRelationshipLevel,
-  } = useCompanions();
+  const { companions, getMessages, addMessage, updateRelationshipLevel } =
+    useCompanions();
 
   const companion = companions.find((c) => c.id === id);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -60,27 +56,35 @@ export default function ChatScreen() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isLoadingTTS, setIsLoadingTTS] = useState(false);
+  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const recordingRef = useRef<Audio.Recording | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
 
   const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
 
-  // Pulse animation for recording indicator
+  // Pulse for recording indicator
   const recordPulse = useSharedValue(1);
   const recordStyle = useAnimatedStyle(() => ({
     transform: [{ scale: recordPulse.value }],
     opacity: recordPulse.value,
   }));
 
+  // Pulse for speaking waveform
+  const speakPulse = useSharedValue(1);
+  const speakStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: speakPulse.value }],
+  }));
+
   useEffect(() => {
     if (isRecording) {
       recordPulse.value = withRepeat(
-        withSequence(
-          withTiming(0.6, { duration: 500 }),
-          withTiming(1, { duration: 500 })
-        ),
+        withSequence(withTiming(0.6, { duration: 500 }), withTiming(1, { duration: 500 })),
         -1,
         false
       );
@@ -90,12 +94,91 @@ export default function ChatScreen() {
   }, [isRecording]);
 
   useEffect(() => {
+    if (isSpeaking) {
+      speakPulse.value = withRepeat(
+        withSequence(withTiming(1.2, { duration: 400 }), withTiming(0.9, { duration: 400 })),
+        -1,
+        false
+      );
+    } else {
+      speakPulse.value = withTiming(1);
+    }
+  }, [isSpeaking]);
+
+  // Load messages
+  useEffect(() => {
     if (!id) return;
     getMessages(id).then((msgs) => {
       setMessages(msgs);
       setIsLoaded(true);
     });
   }, [id]);
+
+  // Cleanup sound on unmount
+  useEffect(() => {
+    return () => {
+      soundRef.current?.unloadAsync().catch(() => {});
+    };
+  }, []);
+
+  const stopSound = useCallback(async () => {
+    if (soundRef.current) {
+      try {
+        await soundRef.current.stopAsync();
+        await soundRef.current.unloadAsync();
+      } catch { /* ignore */ }
+      soundRef.current = null;
+    }
+    setIsSpeaking(false);
+    setIsLoadingTTS(false);
+    setSpeakingMsgId(null);
+  }, []);
+
+  const playTTS = useCallback(
+    async (text: string, msgId: string) => {
+      if (!process.env.EXPO_PUBLIC_DOMAIN && Platform.OS !== "web") return;
+      await stopSound();
+
+      const typeInfo = companion ? COMPANION_TYPES[companion.type] : null;
+      const voice = typeInfo?.voice || "nova";
+      const url = `${API_BASE}/companion/tts?text=${encodeURIComponent(text.slice(0, 800))}&voice=${voice}`;
+
+      setIsLoadingTTS(true);
+      setSpeakingMsgId(msgId);
+
+      try {
+        if (Platform.OS !== "web") {
+          await Audio.setAudioModeAsync({
+            allowsRecordingIOS: false,
+            playsInSilentModeIOS: true,
+            staysActiveInBackground: false,
+          });
+        }
+
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: url },
+          { shouldPlay: true }
+        );
+        soundRef.current = sound;
+        setIsLoadingTTS(false);
+        setIsSpeaking(true);
+
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if (!status.isLoaded) return;
+          if (status.didJustFinish) {
+            setIsSpeaking(false);
+            setSpeakingMsgId(null);
+            soundRef.current = null;
+          }
+        });
+      } catch {
+        setIsLoadingTTS(false);
+        setIsSpeaking(false);
+        setSpeakingMsgId(null);
+      }
+    },
+    [companion, stopSound]
+  );
 
   const displayMessages = [...messages];
   if (isStreaming && streamingContent) {
@@ -127,10 +210,7 @@ export default function ChatScreen() {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
       const apiMessages = [
-        ...currentMessages.slice(-20).map((m) => ({
-          role: m.role,
-          content: m.content,
-        })),
+        ...currentMessages.slice(-20).map((m) => ({ role: m.role, content: m.content })),
         { role: "user" as const, content: userContent },
       ];
 
@@ -193,8 +273,10 @@ export default function ChatScreen() {
         abortRef.current = null;
 
         if (fullContent) {
+          const msgId =
+            Date.now().toString() + Math.random().toString(36).substr(2, 6);
           const assistantMsg: Message = {
-            id: Date.now().toString() + Math.random().toString(36).substr(2, 6),
+            id: msgId,
             role: "assistant",
             content: fullContent,
             timestamp: Date.now(),
@@ -203,13 +285,26 @@ export default function ChatScreen() {
           await addMessage(companion.id, assistantMsg);
           await updateRelationshipLevel(companion.id, 2);
           await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+          // Auto-play TTS if enabled
+          if (ttsEnabled) {
+            playTTS(fullContent, msgId);
+          }
         }
       }
     },
-    [input, isStreaming, companion, messages, addMessage, updateRelationshipLevel]
+    [input, isStreaming, companion, messages, addMessage, updateRelationshipLevel, ttsEnabled, playTTS]
   );
 
   const handleSend = () => sendTextMessage(input);
+
+  const handleToggleTTS = useCallback(async () => {
+    if (isSpeaking || isLoadingTTS) {
+      await stopSound();
+    } else {
+      setTtsEnabled((prev) => !prev);
+    }
+  }, [isSpeaking, isLoadingTTS, stopSound]);
 
   const startRecording = useCallback(async () => {
     if (Platform.OS === "web") {
@@ -222,17 +317,14 @@ export default function ChatScreen() {
         Alert.alert("Permission Required", "Microphone permission is needed for voice messages.");
         return;
       }
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
       const { recording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
       recordingRef.current = recording;
       setIsRecording(true);
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch (err) {
+    } catch {
       Alert.alert("Error", "Failed to start recording. Please try again.");
     }
   }, []);
@@ -246,17 +338,12 @@ export default function ChatScreen() {
       await recordingRef.current.stopAndUnloadAsync();
       const uri = recordingRef.current.getURI();
       recordingRef.current = null;
-
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
 
       if (!uri) throw new Error("No recording URI");
 
       const formData = new FormData();
-      formData.append("audio", {
-        uri,
-        type: "audio/m4a",
-        name: "voice.m4a",
-      } as any);
+      formData.append("audio", { uri, type: "audio/m4a", name: "voice.m4a" } as any);
 
       const res = await fetch(`${API_BASE}/companion/transcribe`, {
         method: "POST",
@@ -264,7 +351,7 @@ export default function ChatScreen() {
       });
 
       if (!res.ok) throw new Error("Transcription failed");
-      const data = await res.json() as { transcript?: string };
+      const data = (await res.json()) as { transcript?: string };
       const transcript = data.transcript?.trim();
 
       if (transcript) {
@@ -272,27 +359,22 @@ export default function ChatScreen() {
       } else {
         Alert.alert("No speech detected", "Please try speaking more clearly.");
       }
-    } catch (err) {
-      Alert.alert("Error", "Failed to transcribe audio. Please check your API key.");
+    } catch {
+      Alert.alert("Error", "Failed to transcribe. Please check your API key.");
     } finally {
       setIsTranscribing(false);
     }
   }, [sendTextMessage]);
 
   const handleMicPress = () => {
-    if (isRecording) {
-      stopRecording();
-    } else {
-      startRecording();
-    }
+    if (isRecording) stopRecording();
+    else startRecording();
   };
 
   if (!companion) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.foreground, padding: 20 }}>
-          Companion not found
-        </Text>
+        <Text style={{ color: colors.foreground, padding: 20 }}>Companion not found</Text>
       </View>
     );
   }
@@ -305,13 +387,26 @@ export default function ChatScreen() {
     .join("")
     .toUpperCase();
 
+  const ttsIconName = isLoadingTTS
+    ? "hourglass-outline"
+    : isSpeaking
+    ? "stop-circle"
+    : ttsEnabled
+    ? "volume-high"
+    : "volume-mute-outline";
+
+  const ttsIconColor = isSpeaking || isLoadingTTS
+    ? colors.primary
+    : ttsEnabled
+    ? colors.primary
+    : colors.mutedForeground;
+
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
       behavior="padding"
       keyboardVerticalOffset={0}
     >
-      {/* Subtle gradient background */}
       <LinearGradient
         colors={[colors.background, colors.muted, colors.background] as any}
         style={StyleSheet.absoluteFill}
@@ -331,10 +426,7 @@ export default function ChatScreen() {
         ]}
       >
         <Pressable
-          onPress={() => {
-            abortRef.current?.abort();
-            router.back();
-          }}
+          onPress={() => { abortRef.current?.abort(); stopSound(); router.back(); }}
           style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
         >
           <Ionicons name="chevron-back" size={24} color={colors.foreground} />
@@ -356,21 +448,48 @@ export default function ChatScreen() {
             <Text style={[styles.headerName, { color: colors.foreground }]}>
               {companion.name}
             </Text>
-            <Text style={[styles.headerType, { color: colors.mutedForeground }]}>
+            <Text style={[styles.headerSubtitle, { color: colors.mutedForeground }]}>
               {typeInfo.emoji} {typeInfo.label}
               {isStreaming ? " · typing..." : ""}
               {isTranscribing ? " · transcribing..." : ""}
+              {isLoadingTTS ? " · loading voice..." : ""}
             </Text>
           </View>
         </Pressable>
 
+        {/* TTS toggle */}
         <Pressable
-          onPress={() => router.push(`/profile/${companion.id}`)}
-          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+          onPress={handleToggleTTS}
+          style={({ pressed }) => [
+            styles.headerBtn,
+            {
+              backgroundColor: ttsEnabled || isSpeaking || isLoadingTTS
+                ? `${colors.primary}20`
+                : "transparent",
+              opacity: pressed ? 0.7 : 1,
+            },
+          ]}
         >
-          <Ionicons name="ellipsis-horizontal" size={22} color={colors.foreground} />
+          <Animated.View style={isSpeaking ? speakStyle : undefined}>
+            <Ionicons name={ttsIconName as any} size={22} color={ttsIconColor} />
+          </Animated.View>
         </Pressable>
       </View>
+
+      {/* TTS enabled banner */}
+      {ttsEnabled && !isSpeaking && !isLoadingTTS && (
+        <View
+          style={[
+            styles.ttsBanner,
+            { backgroundColor: `${colors.primary}14`, borderColor: `${colors.primary}30` },
+          ]}
+        >
+          <Ionicons name="volume-high" size={13} color={colors.primary} />
+          <Text style={[styles.ttsBannerText, { color: colors.primary }]}>
+            Voice replies on · {typeInfo.voice}
+          </Text>
+        </View>
+      )}
 
       {/* Messages */}
       {!isLoaded ? (
@@ -386,13 +505,24 @@ export default function ChatScreen() {
           showsVerticalScrollIndicator={false}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
-          scrollEnabled={!!reversedMessages.length}
           renderItem={({ item }) => (
             <ChatBubble
               message={item}
               companionGradient={companion.avatarGradient}
               companionInitials={initials}
               isStreaming={item.id === "__streaming__" && isStreaming}
+              isSpeaking={item.id === speakingMsgId}
+              onSpeakPress={
+                item.role === "assistant" && item.id !== "__streaming__"
+                  ? () => {
+                      if (speakingMsgId === item.id && isSpeaking) {
+                        stopSound();
+                      } else {
+                        playTTS(item.content, item.id);
+                      }
+                    }
+                  : undefined
+              }
             />
           )}
           ListFooterComponent={
@@ -418,13 +548,13 @@ export default function ChatScreen() {
           <Animated.View
             style={[
               styles.recordingBanner,
-              { backgroundColor: "rgba(239,68,68,0.12)" },
+              { backgroundColor: "rgba(239,68,68,0.10)" },
               recordStyle,
             ]}
           >
             <View style={styles.recordingDot} />
-            <Text style={[styles.recordingText, { color: colors.destructive }]}>
-              Recording... tap stop when done
+            <Text style={[styles.recordingText, { color: "#ef4444" }]}>
+              Recording… tap stop when done
             </Text>
           </Animated.View>
         )}
@@ -434,11 +564,10 @@ export default function ChatScreen() {
             styles.inputRow,
             {
               backgroundColor: colors.card,
-              borderColor: isRecording ? colors.destructive : colors.border,
+              borderColor: isRecording ? "#ef4444" : colors.border,
             },
           ]}
         >
-          {/* Mic button */}
           {Platform.OS !== "web" && (
             <Pressable
               onPress={handleMicPress}
@@ -446,9 +575,7 @@ export default function ChatScreen() {
               style={({ pressed }) => [
                 styles.micBtn,
                 {
-                  backgroundColor: isRecording
-                    ? "rgba(239,68,68,0.12)"
-                    : "transparent",
+                  backgroundColor: isRecording ? "rgba(239,68,68,0.12)" : "transparent",
                   opacity: pressed ? 0.7 : isStreaming || isTranscribing ? 0.4 : 1,
                 },
               ]}
@@ -456,7 +583,7 @@ export default function ChatScreen() {
               <Ionicons
                 name={isRecording ? "stop-circle" : "mic-outline"}
                 size={22}
-                color={isRecording ? colors.destructive : colors.mutedForeground}
+                color={isRecording ? "#ef4444" : colors.mutedForeground}
               />
             </Pressable>
           )}
@@ -465,10 +592,10 @@ export default function ChatScreen() {
             style={[styles.input, { color: colors.foreground }]}
             placeholder={
               isTranscribing
-                ? "Transcribing..."
+                ? "Transcribing…"
                 : isRecording
-                ? "Recording voice..."
-                : `Message ${companion.name}...`
+                ? "Recording voice…"
+                : `Message ${companion.name}…`
             }
             placeholderTextColor={colors.mutedForeground}
             value={input}
@@ -481,18 +608,10 @@ export default function ChatScreen() {
             editable={!isRecording && !isTranscribing}
           />
 
-          {/* Send / Stop button */}
           <Pressable
-            onPress={
-              isStreaming
-                ? () => abortRef.current?.abort()
-                : handleSend
-            }
+            onPress={isStreaming ? () => abortRef.current?.abort() : handleSend}
             disabled={!isStreaming && !input.trim()}
-            style={({ pressed }) => [
-              styles.sendBtn,
-              { opacity: pressed ? 0.75 : 1 },
-            ]}
+            style={({ pressed }) => [styles.sendBtn, { opacity: pressed ? 0.75 : 1 }]}
           >
             <LinearGradient
               colors={
@@ -507,11 +626,7 @@ export default function ChatScreen() {
               <Ionicons
                 name={isStreaming ? "stop" : "arrow-up"}
                 size={18}
-                color={
-                  input.trim() || isStreaming
-                    ? "#FFFFFF"
-                    : colors.mutedForeground
-                }
+                color={input.trim() || isStreaming ? "#FFFFFF" : colors.mutedForeground}
               />
             </LinearGradient>
           </Pressable>
@@ -521,18 +636,12 @@ export default function ChatScreen() {
   );
 }
 
-function GreetingCard({
-  companion,
-  colors,
-}: {
-  companion: any;
-  colors: any;
-}) {
+function GreetingCard({ companion, colors }: { companion: any; colors: any }) {
   const typeInfo = COMPANION_TYPES[companion.type];
   const initials = companion.name
     .split(" ")
     .slice(0, 2)
-    .map((w) => w[0])
+    .map((w: string) => w[0])
     .join("")
     .toUpperCase();
 
@@ -556,13 +665,8 @@ function GreetingCard({
         {typeInfo.description}
       </Text>
       <Text style={[styles.greetingHint, { color: colors.mutedForeground }]}>
-        Say hello to begin your conversation
+        Say hello to begin · tap the speaker icon for voice replies
       </Text>
-      {Platform.OS !== "web" && (
-        <Text style={[styles.greetingHint, { color: colors.mutedForeground }]}>
-          Tap the mic icon to send a voice message
-        </Text>
-      )}
     </View>
   );
 }
@@ -577,12 +681,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 12,
   },
-  headerCenter: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
+  headerCenter: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
   headerAvatar: {
     width: 36,
     height: 36,
@@ -596,24 +695,31 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontFamily: "Inter_700Bold",
   },
-  headerName: {
-    fontSize: 16,
-    fontWeight: "600" as const,
-    fontFamily: "Inter_600SemiBold",
-  },
-  headerType: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-  },
-  loadingCenter: {
-    flex: 1,
+  headerName: { fontSize: 16, fontWeight: "600" as const, fontFamily: "Inter_600SemiBold" },
+  headerSubtitle: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  headerBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
   },
-  messageList: {
-    paddingHorizontal: 0,
-    paddingTop: 24,
+  ttsBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  ttsBannerText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    fontWeight: "500" as const,
+    textTransform: "capitalize",
+  },
+  loadingCenter: { flex: 1, alignItems: "center", justifyContent: "center" },
+  messageList: { paddingHorizontal: 0, paddingTop: 24 },
   inputBar: {
     paddingHorizontal: 16,
     paddingTop: 10,
@@ -628,17 +734,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 12,
   },
-  recordingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#ef4444",
-  },
-  recordingText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    fontWeight: "500" as const,
-  },
+  recordingDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#ef4444" },
+  recordingText: { fontSize: 13, fontFamily: "Inter_500Medium", fontWeight: "500" as const },
   inputRow: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -664,11 +761,7 @@ const styles = StyleSheet.create({
     maxHeight: 120,
     paddingVertical: 4,
   },
-  sendBtn: {
-    borderRadius: 20,
-    overflow: "hidden",
-    flexShrink: 0,
-  },
+  sendBtn: { borderRadius: 20, overflow: "hidden", flexShrink: 0 },
   sendBtnInner: {
     width: 36,
     height: 36,
@@ -676,12 +769,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  greeting: {
-    alignItems: "center",
-    paddingHorizontal: 40,
-    paddingVertical: 32,
-    gap: 8,
-  },
+  greeting: { alignItems: "center", paddingHorizontal: 40, paddingVertical: 32, gap: 8 },
   greetingAvatar: {
     width: 80,
     height: 80,
@@ -696,27 +784,8 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontFamily: "Inter_700Bold",
   },
-  greetingName: {
-    fontSize: 22,
-    fontWeight: "700" as const,
-    fontFamily: "Inter_700Bold",
-    textAlign: "center",
-  },
-  greetingType: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-    fontWeight: "500" as const,
-  },
-  greetingDesc: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
-    lineHeight: 21,
-  },
-  greetingHint: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    marginTop: 4,
-    textAlign: "center",
-  },
+  greetingName: { fontSize: 22, fontWeight: "700" as const, fontFamily: "Inter_700Bold", textAlign: "center" },
+  greetingType: { fontSize: 14, fontFamily: "Inter_500Medium", fontWeight: "500" as const },
+  greetingDesc: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 21 },
+  greetingHint: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 4, textAlign: "center" },
 });
