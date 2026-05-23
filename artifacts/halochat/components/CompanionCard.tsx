@@ -14,12 +14,13 @@ import { useColors } from "@/hooks/useColors";
 interface Props {
   companion: Companion;
   onPress: () => void;
+  onCallPress?: () => void;
   onLongPress?: () => void;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export function CompanionCard({ companion, onPress, onLongPress }: Props) {
+export function CompanionCard({ companion, onPress, onCallPress, onLongPress }: Props) {
   const colors = useColors();
   const scale = useSharedValue(1);
 
@@ -116,9 +117,7 @@ export function CompanionCard({ companion, onPress, onLongPress }: Props) {
           )}
 
           <View style={styles.bondRow}>
-            <View
-              style={[styles.bondTrack, { backgroundColor: colors.muted }]}
-            >
+            <View style={[styles.bondTrack, { backgroundColor: colors.muted }]}>
               <LinearGradient
                 colors={companion.avatarGradient}
                 style={[styles.bondFill, { width: `${relPercent}%` as any }]}
@@ -129,11 +128,29 @@ export function CompanionCard({ companion, onPress, onLongPress }: Props) {
           </View>
         </View>
 
-        <Ionicons
-          name="chevron-forward"
-          size={16}
-          color={colors.mutedForeground}
-        />
+        {/* Right actions */}
+        <View style={styles.rightActions}>
+          {onCallPress && Platform.OS !== "web" && (
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation?.();
+                onCallPress();
+              }}
+              style={({ pressed }) => [
+                styles.callBtn,
+                {
+                  backgroundColor: pressed
+                    ? `${colors.primary}20`
+                    : `${colors.primary}12`,
+                  borderColor: `${colors.primary}30`,
+                },
+              ]}
+            >
+              <Ionicons name="call-outline" size={15} color={colors.primary} />
+            </Pressable>
+          )}
+          <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+        </View>
       </View>
     </AnimatedPressable>
   );
@@ -176,10 +193,7 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontFamily: "Inter_700Bold",
   },
-  content: {
-    flex: 1,
-    gap: 3,
-  },
+  content: { flex: 1, gap: 3 },
   topRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -191,44 +205,32 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     flex: 1,
   },
-  time: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-  },
-  typeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  typeTag: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-  },
-  relLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-  },
-  lastMessage: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    marginTop: 2,
-  },
+  time: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  typeRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  typeTag: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  relLabel: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  lastMessage: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
   noMessage: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
     fontStyle: "italic",
     marginTop: 2,
   },
-  bondRow: {
-    marginTop: 6,
+  bondRow: { marginTop: 6 },
+  bondTrack: { height: 3, borderRadius: 2, overflow: "hidden" },
+  bondFill: { height: 3, borderRadius: 2 },
+  rightActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
   },
-  bondTrack: {
-    height: 3,
-    borderRadius: 2,
-    overflow: "hidden",
-  },
-  bondFill: {
-    height: 3,
-    borderRadius: 2,
+  callBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
   },
 });

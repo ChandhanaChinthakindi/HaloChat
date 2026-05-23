@@ -107,6 +107,46 @@ router.post("/companion/chat", async (req, res) => {
   }
 });
 
+router.post("/companion/chat-sync", async (req, res) => {
+  const { companionType, companionName, memoryNotes, customPersonality, messages } =
+    req.body as {
+      companionType: string;
+      companionName: string;
+      memoryNotes?: string[];
+      customPersonality?: string;
+      messages: Array<{ role: "user" | "assistant"; content: string }>;
+    };
+
+  if (!process.env["OPENAI_API_KEY"]) {
+    res.json({ content: `Hey! I'm ${companionName}. Set up your OpenAI API key to start talking with me!` });
+    return;
+  }
+
+  let systemPrompt =
+    COMPANION_SYSTEM_PROMPTS[companionType] ||
+    COMPANION_SYSTEM_PROMPTS["supportive"];
+
+  systemPrompt = `Your name is ${companionName}. ${systemPrompt}`;
+  if (customPersonality) systemPrompt += `\n\nAdditional personality: ${customPersonality}`;
+  if (memoryNotes?.length)
+    systemPrompt += `\n\nMemories about the user:\n${memoryNotes.map((n) => `- ${n}`).join("\n")}`;
+  systemPrompt += `\n\nYou are in a VOICE CALL. Keep responses SHORT (1-3 sentences max). Speak naturally and conversationally, as if talking out loud. No markdown, no lists.`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      max_tokens: 200,
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...messages,
+      ],
+    });
+    res.json({ content: completion.choices[0]?.message?.content || "" });
+  } catch (err: any) {
+    res.status(500).json({ content: "I couldn't respond right now. Please try again." });
+  }
+});
+
 router.post(
   "/companion/transcribe",
   upload.single("audio"),

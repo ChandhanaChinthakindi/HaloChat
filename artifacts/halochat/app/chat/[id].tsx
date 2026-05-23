@@ -457,6 +457,19 @@ export default function ChatScreen() {
           </View>
         </Pressable>
 
+        {/* Call button */}
+        {Platform.OS !== "web" && (
+          <Pressable
+            onPress={() => router.push(`/call/${companion.id}`)}
+            style={({ pressed }) => [
+              styles.headerBtn,
+              { backgroundColor: pressed ? `${colors.primary}15` : "transparent", opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <Ionicons name="call-outline" size={20} color={colors.primary} />
+          </Pressable>
+        )}
+
         {/* TTS toggle */}
         <Pressable
           onPress={handleToggleTTS}

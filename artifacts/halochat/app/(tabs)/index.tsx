@@ -31,6 +31,10 @@ export default function CompanionsScreen() {
     router.push(`/chat/${companion.id}`);
   };
 
+  const handleCallPress = (companion: Companion) => {
+    router.push(`/call/${companion.id}`);
+  };
+
   const handleLongPress = (companion: Companion) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert(
@@ -118,6 +122,7 @@ export default function CompanionsScreen() {
             <CompanionCard
               companion={item}
               onPress={() => handlePress(item)}
+              onCallPress={() => handleCallPress(item)}
               onLongPress={() => handleLongPress(item)}
             />
           )}

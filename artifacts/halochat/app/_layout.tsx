@@ -35,6 +35,14 @@ function RootLayoutNav() {
       />
       <Stack.Screen name="chat/[id]" />
       <Stack.Screen name="profile/[id]" />
+      <Stack.Screen
+        name="call/[id]"
+        options={{
+          presentation: "fullScreenModal",
+          animation: "slide_from_bottom",
+          gestureEnabled: false,
+        }}
+      />
     </Stack>
   );
 }
