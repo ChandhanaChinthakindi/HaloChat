@@ -45,7 +45,7 @@ export default function ChatScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { companions, getMessages, addMessage, updateRelationshipLevel } =
+  const { companions, getMessages, addMessage, updateRelationshipLevel, addMemoryNote } =
     useCompanions();
 
   const companion = companions.find((c) => c.id === id);
@@ -190,6 +190,8 @@ export default function ChatScreen() {
           await addMessage(companion.id, assistantMsg);
           await updateRelationshipLevel(companion.id, 2);
           await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          const allMsgs = [...currentMessages, userMsg, assistantMsg];
+          extractMemories(allMsgs);
         }
       }
     },
@@ -257,6 +259,27 @@ export default function ChatScreen() {
       setIsTranscribing(false);
     }
   }, [sendTextMessage]);
+
+  const extractMemories = useCallback(
+    async (msgs: Message[]) => {
+      if (!companion || msgs.length < 4) return;
+      try {
+        const res = await fetch(`${API_BASE}/companion/extract-memory`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: msgs.slice(-12).map((m) => ({ role: m.role, content: m.content })),
+            existingNotes: companion.memoryNotes,
+          }),
+        });
+        const data = (await res.json()) as { facts?: string[] };
+        for (const fact of data.facts ?? []) {
+          if (fact.trim()) await addMemoryNote(companion.id, fact);
+        }
+      } catch { /* silent */ }
+    },
+    [companion, addMemoryNote]
+  );
 
   const handleMicPress = () => {
     if (isRecording) stopRecording();

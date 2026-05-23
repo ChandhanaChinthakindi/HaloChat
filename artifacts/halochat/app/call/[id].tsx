@@ -60,7 +60,7 @@ export default function CallScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { companions, addMessage } = useCompanions();
+  const { companions, addMessage, addMemoryNote } = useCompanions();
 
   const companion = companions.find((c) => c.id === id);
   const [phase, setPhase] = useState<CallPhase>("connecting");
@@ -316,13 +316,37 @@ export default function CallScreen() {
     else if (phase === "idle") startRecording();
   };
 
+  const extractMemories = useCallback(
+    async (msgs: CallMessage[]) => {
+      if (!companion || msgs.length < 2) return;
+      try {
+        const res = await fetch(`${API_BASE}/companion/extract-memory`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: msgs.map((m) => ({ role: m.role, content: m.content })),
+            existingNotes: companion.memoryNotes,
+          }),
+        });
+        const data = (await res.json()) as { facts?: string[] };
+        for (const fact of data.facts ?? []) {
+          if (fact.trim()) await addMemoryNote(companion.id, fact);
+        }
+      } catch { /* silent */ }
+    },
+    [companion, addMemoryNote]
+  );
+
   const endCall = useCallback(async () => {
     if (timerRef.current) clearInterval(timerRef.current);
     await stopSound();
     await recordingRef.current?.stopAndUnloadAsync().catch(() => {});
 
-    // Save transcript to chat history
     if (companion && transcriptRef.current.length > 0) {
+      // Extract memories from call in the background
+      extractMemories(transcriptRef.current);
+
+      // Save transcript to chat history
       for (const msg of transcriptRef.current) {
         const chatMsg: Message = {
           id: Date.now().toString() + Math.random().toString(36).substr(2, 6),
@@ -336,7 +360,7 @@ export default function CallScreen() {
 
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     router.back();
-  }, [companion, addMessage, stopSound]);
+  }, [companion, addMessage, stopSound, extractMemories]);
 
   if (!companion) {
     return (

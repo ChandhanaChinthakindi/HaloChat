@@ -107,6 +107,58 @@ router.post("/companion/chat", async (req, res) => {
   }
 });
 
+router.post("/companion/extract-memory", async (req, res) => {
+  const { messages, existingNotes } = req.body as {
+    messages: Array<{ role: string; content: string }>;
+    existingNotes: string[];
+  };
+
+  if (!process.env["OPENAI_API_KEY"] || !messages?.length) {
+    res.json({ facts: [] });
+    return;
+  }
+
+  const existingBlock = existingNotes?.length
+    ? existingNotes.map((n) => `- ${n}`).join("\n")
+    : "None yet";
+
+  const systemPrompt = `You are a memory extraction AI. Given a conversation excerpt, identify any NEW personal facts about the user worth remembering for future conversations.
+
+Existing known facts (DO NOT duplicate or rephrase these):
+${existingBlock}
+
+Rules:
+- Only extract facts that are personal to the user
+- Must NOT already be captured in the existing facts above
+- Keep each fact under 12 words, concrete and specific
+- Focus on: name, job, hobbies, goals, relationships, location, pets, important dates, struggles, preferences
+- Return ONLY valid JSON: { "facts": ["fact 1", "fact 2"] }
+- Return { "facts": [] } if nothing new to remember`;
+
+  const conversationText = messages
+    .slice(-12)
+    .map((m) => `${m.role === "user" ? "User" : "Companion"}: ${m.content}`)
+    .join("\n");
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      max_tokens: 200,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Conversation:\n${conversationText}` },
+      ],
+    });
+
+    const raw = completion.choices[0]?.message?.content || '{"facts":[]}';
+    const parsed = JSON.parse(raw);
+    res.json({ facts: Array.isArray(parsed.facts) ? parsed.facts : [] });
+  } catch {
+    res.json({ facts: [] });
+  }
+});
+
 router.post("/companion/chat-sync", async (req, res) => {
   const { companionType, companionName, memoryNotes, customPersonality, messages } =
     req.body as {

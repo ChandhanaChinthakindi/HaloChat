@@ -141,6 +141,7 @@ interface CompanionContextType {
   addMessage: (companionId: string, message: Message) => Promise<void>;
   updateRelationshipLevel: (companionId: string, delta: number) => Promise<void>;
   addMemoryNote: (companionId: string, note: string) => Promise<void>;
+  removeMemoryNote: (companionId: string, index: number) => Promise<void>;
   clearMessages: (companionId: string) => Promise<void>;
   isLoaded: boolean;
 }
@@ -278,10 +279,26 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       setCompanions((prev) => {
         const list = prev.map((c) => {
           if (c.id !== companionId) return c;
-          return {
-            ...c,
-            memoryNotes: [...c.memoryNotes.slice(-9), note],
-          };
+          const existing = c.memoryNotes;
+          const trimmed = note.trim();
+          if (existing.includes(trimmed)) return c;
+          return { ...c, memoryNotes: [...existing.slice(-19), trimmed] };
+        });
+        AsyncStorage.setItem(COMPANIONS_KEY, JSON.stringify(list));
+        return list;
+      });
+    },
+    []
+  );
+
+  const removeMemoryNote = useCallback(
+    async (companionId: string, index: number) => {
+      setCompanions((prev) => {
+        const list = prev.map((c) => {
+          if (c.id !== companionId) return c;
+          const notes = [...c.memoryNotes];
+          notes.splice(index, 1);
+          return { ...c, memoryNotes: notes };
         });
         AsyncStorage.setItem(COMPANIONS_KEY, JSON.stringify(list));
         return list;
@@ -314,6 +331,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         addMessage,
         updateRelationshipLevel,
         addMemoryNote,
+        removeMemoryNote,
         clearMessages,
         isLoaded,
       }}

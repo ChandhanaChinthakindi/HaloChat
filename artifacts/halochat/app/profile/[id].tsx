@@ -23,7 +23,7 @@ export default function ProfileScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { companions, deleteCompanion, clearMessages, addMemoryNote } = useCompanions();
+  const { companions, deleteCompanion, clearMessages, addMemoryNote, removeMemoryNote } = useCompanions();
 
   const companion = companions.find((c) => c.id === id);
   const [newNote, setNewNote] = useState("");
@@ -156,12 +156,29 @@ export default function ProfileScreen() {
           </Text>
         </View>
 
-        {companion.memoryNotes.length > 0 && (
-          <View style={[styles.section, { paddingHorizontal: 20 }]}>
+        <View style={[styles.section, { paddingHorizontal: 20 }]}>
+          <View style={styles.sectionHeaderRow}>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-              Memories
+              Memory
             </Text>
-            {companion.memoryNotes.map((note, i) => (
+            {companion.memoryNotes.length > 0 && (
+              <View style={[styles.memoryCountBadge, { backgroundColor: `${colors.primary}18` }]}>
+                <Ionicons name="sparkles" size={11} color={colors.primary} />
+                <Text style={[styles.memoryCountText, { color: colors.primary }]}>
+                  {companion.memoryNotes.length} facts learned
+                </Text>
+              </View>
+            )}
+          </View>
+          {companion.memoryNotes.length === 0 ? (
+            <View style={[styles.emptyMemory, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Ionicons name="sparkles-outline" size={22} color={colors.mutedForeground} />
+              <Text style={[styles.emptyMemoryText, { color: colors.mutedForeground }]}>
+                No memories yet. Chat or call to let {companion.name} learn about you.
+              </Text>
+            </View>
+          ) : (
+            companion.memoryNotes.map((note, i) => (
               <View
                 key={i}
                 style={[
@@ -169,18 +186,25 @@ export default function ProfileScreen() {
                   { backgroundColor: colors.card, borderColor: colors.border },
                 ]}
               >
-                <Ionicons name="bookmark-outline" size={14} color={colors.primary} />
-                <Text style={[styles.noteText, { color: colors.foreground }]}>
+                <Ionicons name="sparkles" size={13} color={colors.primary} />
+                <Text style={[styles.noteText, { color: colors.foreground, flex: 1 }]}>
                   {note}
                 </Text>
+                <Pressable
+                  onPress={() => removeMemoryNote(companion.id, i)}
+                  hitSlop={8}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
+                >
+                  <Ionicons name="close-circle-outline" size={16} color={colors.mutedForeground} />
+                </Pressable>
               </View>
-            ))}
-          </View>
-        )}
+            ))
+          )}
+        </View>
 
         <View style={[styles.section, { paddingHorizontal: 20 }]}>
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-            Add Memory Note
+            Add Memory
           </Text>
           <View
             style={[
@@ -348,6 +372,38 @@ const styles = StyleSheet.create({
   bondLabel: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  memoryCountBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  memoryCountText: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    fontWeight: "500" as const,
+  },
+  emptyMemory: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  emptyMemoryText: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    flex: 1,
+    lineHeight: 18,
   },
   noteChip: {
     flexDirection: "row",
