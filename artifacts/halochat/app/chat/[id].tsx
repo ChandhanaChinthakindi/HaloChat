@@ -56,37 +56,24 @@ export default function ChatScreen() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const [ttsEnabled, setTtsEnabled] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isLoadingTTS, setIsLoadingTTS] = useState(false);
-  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const recordingRef = useRef<Audio.Recording | null>(null);
-  const soundRef = useRef<Audio.Sound | null>(null);
 
   const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
 
-  // Pulse for recording indicator
   const recordPulse = useSharedValue(1);
   const recordStyle = useAnimatedStyle(() => ({
     transform: [{ scale: recordPulse.value }],
     opacity: recordPulse.value,
   }));
 
-  // Pulse for speaking waveform
-  const speakPulse = useSharedValue(1);
-  const speakStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: speakPulse.value }],
-  }));
-
   useEffect(() => {
     if (isRecording) {
       recordPulse.value = withRepeat(
         withSequence(withTiming(0.6, { duration: 500 }), withTiming(1, { duration: 500 })),
-        -1,
-        false
+        -1, false
       );
     } else {
       recordPulse.value = withTiming(1);
@@ -94,91 +81,12 @@ export default function ChatScreen() {
   }, [isRecording]);
 
   useEffect(() => {
-    if (isSpeaking) {
-      speakPulse.value = withRepeat(
-        withSequence(withTiming(1.2, { duration: 400 }), withTiming(0.9, { duration: 400 })),
-        -1,
-        false
-      );
-    } else {
-      speakPulse.value = withTiming(1);
-    }
-  }, [isSpeaking]);
-
-  // Load messages
-  useEffect(() => {
     if (!id) return;
     getMessages(id).then((msgs) => {
       setMessages(msgs);
       setIsLoaded(true);
     });
   }, [id]);
-
-  // Cleanup sound on unmount
-  useEffect(() => {
-    return () => {
-      soundRef.current?.unloadAsync().catch(() => {});
-    };
-  }, []);
-
-  const stopSound = useCallback(async () => {
-    if (soundRef.current) {
-      try {
-        await soundRef.current.stopAsync();
-        await soundRef.current.unloadAsync();
-      } catch { /* ignore */ }
-      soundRef.current = null;
-    }
-    setIsSpeaking(false);
-    setIsLoadingTTS(false);
-    setSpeakingMsgId(null);
-  }, []);
-
-  const playTTS = useCallback(
-    async (text: string, msgId: string) => {
-      if (!process.env.EXPO_PUBLIC_DOMAIN && Platform.OS !== "web") return;
-      await stopSound();
-
-      const typeInfo = companion ? COMPANION_TYPES[companion.type] : null;
-      const voice = typeInfo?.voice || "nova";
-      const url = `${API_BASE}/companion/tts?text=${encodeURIComponent(text.slice(0, 800))}&voice=${voice}`;
-
-      setIsLoadingTTS(true);
-      setSpeakingMsgId(msgId);
-
-      try {
-        if (Platform.OS !== "web") {
-          await Audio.setAudioModeAsync({
-            allowsRecordingIOS: false,
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: false,
-          });
-        }
-
-        const { sound } = await Audio.Sound.createAsync(
-          { uri: url },
-          { shouldPlay: true }
-        );
-        soundRef.current = sound;
-        setIsLoadingTTS(false);
-        setIsSpeaking(true);
-
-        sound.setOnPlaybackStatusUpdate((status) => {
-          if (!status.isLoaded) return;
-          if (status.didJustFinish) {
-            setIsSpeaking(false);
-            setSpeakingMsgId(null);
-            soundRef.current = null;
-          }
-        });
-      } catch {
-        setIsLoadingTTS(false);
-        setIsSpeaking(false);
-        setSpeakingMsgId(null);
-      }
-    },
-    [companion, stopSound]
-  );
 
   const displayMessages = [...messages];
   if (isStreaming && streamingContent) {
@@ -264,8 +172,7 @@ export default function ChatScreen() {
         }
       } catch (err: any) {
         if (err?.name === "AbortError") return;
-        fullContent =
-          "I'm having trouble connecting. Please check that OPENAI_API_KEY is configured on the server. ✦";
+        fullContent = "I'm having trouble connecting. Please check that OPENAI_API_KEY is set on the server. ✦";
         setStreamingContent(fullContent);
       } finally {
         setIsStreaming(false);
@@ -273,10 +180,8 @@ export default function ChatScreen() {
         abortRef.current = null;
 
         if (fullContent) {
-          const msgId =
-            Date.now().toString() + Math.random().toString(36).substr(2, 6);
           const assistantMsg: Message = {
-            id: msgId,
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 6),
             role: "assistant",
             content: fullContent,
             timestamp: Date.now(),
@@ -285,30 +190,17 @@ export default function ChatScreen() {
           await addMessage(companion.id, assistantMsg);
           await updateRelationshipLevel(companion.id, 2);
           await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-          // Auto-play TTS if enabled
-          if (ttsEnabled) {
-            playTTS(fullContent, msgId);
-          }
         }
       }
     },
-    [input, isStreaming, companion, messages, addMessage, updateRelationshipLevel, ttsEnabled, playTTS]
+    [input, isStreaming, companion, messages, addMessage, updateRelationshipLevel]
   );
 
   const handleSend = () => sendTextMessage(input);
 
-  const handleToggleTTS = useCallback(async () => {
-    if (isSpeaking || isLoadingTTS) {
-      await stopSound();
-    } else {
-      setTtsEnabled((prev) => !prev);
-    }
-  }, [isSpeaking, isLoadingTTS, stopSound]);
-
   const startRecording = useCallback(async () => {
     if (Platform.OS === "web") {
-      Alert.alert("Voice", "Voice recording is available on iOS and Android only.");
+      Alert.alert("Voice", "Voice messages are available on iOS and Android only.");
       return;
     }
     try {
@@ -387,20 +279,6 @@ export default function ChatScreen() {
     .join("")
     .toUpperCase();
 
-  const ttsIconName = isLoadingTTS
-    ? "hourglass-outline"
-    : isSpeaking
-    ? "stop-circle"
-    : ttsEnabled
-    ? "volume-high"
-    : "volume-mute-outline";
-
-  const ttsIconColor = isSpeaking || isLoadingTTS
-    ? colors.primary
-    : ttsEnabled
-    ? colors.primary
-    : colors.mutedForeground;
-
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -426,7 +304,7 @@ export default function ChatScreen() {
         ]}
       >
         <Pressable
-          onPress={() => { abortRef.current?.abort(); stopSound(); router.back(); }}
+          onPress={() => { abortRef.current?.abort(); router.back(); }}
           style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
         >
           <Ionicons name="chevron-back" size={24} color={colors.foreground} />
@@ -452,57 +330,21 @@ export default function ChatScreen() {
               {typeInfo.emoji} {typeInfo.label}
               {isStreaming ? " · typing..." : ""}
               {isTranscribing ? " · transcribing..." : ""}
-              {isLoadingTTS ? " · loading voice..." : ""}
             </Text>
           </View>
         </Pressable>
 
         {/* Call button */}
-        {Platform.OS !== "web" && (
-          <Pressable
-            onPress={() => router.push(`/call/${companion.id}`)}
-            style={({ pressed }) => [
-              styles.headerBtn,
-              { backgroundColor: pressed ? `${colors.primary}15` : "transparent", opacity: pressed ? 0.7 : 1 },
-            ]}
-          >
-            <Ionicons name="call-outline" size={20} color={colors.primary} />
-          </Pressable>
-        )}
-
-        {/* TTS toggle */}
         <Pressable
-          onPress={handleToggleTTS}
+          onPress={() => router.push(`/call/${companion.id}`)}
           style={({ pressed }) => [
             styles.headerBtn,
-            {
-              backgroundColor: ttsEnabled || isSpeaking || isLoadingTTS
-                ? `${colors.primary}20`
-                : "transparent",
-              opacity: pressed ? 0.7 : 1,
-            },
+            { backgroundColor: pressed ? `${colors.primary}15` : "transparent" },
           ]}
         >
-          <Animated.View style={isSpeaking ? speakStyle : undefined}>
-            <Ionicons name={ttsIconName as any} size={22} color={ttsIconColor} />
-          </Animated.View>
+          <Ionicons name="call-outline" size={20} color={colors.primary} />
         </Pressable>
       </View>
-
-      {/* TTS enabled banner */}
-      {ttsEnabled && !isSpeaking && !isLoadingTTS && (
-        <View
-          style={[
-            styles.ttsBanner,
-            { backgroundColor: `${colors.primary}14`, borderColor: `${colors.primary}30` },
-          ]}
-        >
-          <Ionicons name="volume-high" size={13} color={colors.primary} />
-          <Text style={[styles.ttsBannerText, { color: colors.primary }]}>
-            Voice replies on · {typeInfo.voice}
-          </Text>
-        </View>
-      )}
 
       {/* Messages */}
       {!isLoaded ? (
@@ -524,18 +366,6 @@ export default function ChatScreen() {
               companionGradient={companion.avatarGradient}
               companionInitials={initials}
               isStreaming={item.id === "__streaming__" && isStreaming}
-              isSpeaking={item.id === speakingMsgId}
-              onSpeakPress={
-                item.role === "assistant" && item.id !== "__streaming__"
-                  ? () => {
-                      if (speakingMsgId === item.id && isSpeaking) {
-                        stopSound();
-                      } else {
-                        playTTS(item.content, item.id);
-                      }
-                    }
-                  : undefined
-              }
             />
           )}
           ListFooterComponent={
@@ -678,7 +508,7 @@ function GreetingCard({ companion, colors }: { companion: any; colors: any }) {
         {typeInfo.description}
       </Text>
       <Text style={[styles.greetingHint, { color: colors.mutedForeground }]}>
-        Say hello to begin · tap the speaker icon for voice replies
+        Say hello to start chatting · tap the call button to voice call
       </Text>
     </View>
   );
@@ -716,20 +546,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-  },
-  ttsBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  ttsBannerText: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    fontWeight: "500" as const,
-    textTransform: "capitalize",
   },
   loadingCenter: { flex: 1, alignItems: "center", justifyContent: "center" },
   messageList: { paddingHorizontal: 0, paddingTop: 24 },

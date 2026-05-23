@@ -130,7 +130,7 @@ export function CompanionCard({ companion, onPress, onCallPress, onLongPress }: 
 
         {/* Right actions */}
         <View style={styles.rightActions}>
-          {onCallPress && Platform.OS !== "web" && (
+          {onCallPress && (
             <Pressable
               onPress={(e) => {
                 e.stopPropagation?.();
