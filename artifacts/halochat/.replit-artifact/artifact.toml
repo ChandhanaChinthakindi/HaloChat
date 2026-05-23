@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/"
+title = "HaloChat"
+version = "1.0.0"
+id = "artifacts/halochat"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/" ]
+localPort = 23007
+
+[services.development]
+run = "pnpm --filter @workspace/halochat run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/halochat", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/halochat", "run", "serve" ]
+
+[services.env]
+PORT = "23007"
+BASE_PATH = "/"

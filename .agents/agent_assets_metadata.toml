@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "XGek1F6G8HIaHV74hBT6e"
+uri = "file://artifacts/halochat/assets/images/icon.png"
+type = "image"
+title = "generated_image"
