@@ -1,10 +1,16 @@
-import express, { type Express } from "express";
+import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
+import helmet from "helmet";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
+
+// Trust one level of reverse proxy (Railway / nginx) so req.ip reflects the real client IP.
+app.set("trust proxy", 1);
+
+app.use(helmet());
 
 app.use(
   pinoHttp({
@@ -25,10 +31,20 @@ app.use(
     },
   }),
 );
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+const allowedOrigin = process.env["CORS_ORIGIN"] ?? (process.env["NODE_ENV"] === "production" ? false : "*");
+app.use(cors({ origin: allowedOrigin }));
+app.use(express.json({ limit: "100kb" }));
+app.use(express.urlencoded({ extended: true, limit: "100kb" }));
 
 app.use("/api", router);
+
+// Global error handler — must be last, must have 4 params so Express recognises it as an error handler.
+// Catches anything thrown by middleware or routes that wasn't caught locally.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  logger.error({ err }, "Unhandled error");
+  if (res.headersSent) return;
+  res.status(500).json({ error: "Internal server error" });
+});
 
 export default app;

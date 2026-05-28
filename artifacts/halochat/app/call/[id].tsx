@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
-import * as Haptics from "expo-haptics";
+import * as FileSystem from "expo-file-system";
+import { hapticsImpact, hapticsNotification } from "@/utils/haptics";
+import { ImpactFeedbackStyle, NotificationFeedbackType } from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import { fetch } from "expo/fetch";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -24,15 +25,9 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { COMPANION_TYPES, useCompanions, type Message } from "@/context/CompanionContext";
+import { useAuth } from "@/context/AuthContext";
+import { API_BASE, COMPANION_TYPES, useCompanions } from "@/context/CompanionContext";
 import { useColors } from "@/hooks/useColors";
-
-const DOMAIN = process.env.EXPO_PUBLIC_DOMAIN;
-const API_BASE = DOMAIN
-  ? `https://${DOMAIN}/api`
-  : Platform.OS === "web"
-  ? "/api"
-  : "http://localhost:3000/api";
 
 type CallPhase =
   | "connecting"
@@ -44,12 +39,21 @@ type CallPhase =
 
 const PHASE_LABELS: Record<CallPhase, string> = {
   connecting: "Connecting...",
-  idle: "Tap to speak",
+  idle: "Ready...",
   recording: "Listening...",
   transcribing: "Processing...",
   thinking: "Thinking...",
   speaking: "Speaking...",
 };
+
+// Silence detection
+const SILENCE_THRESHOLD_DB = -40;   // dBFS — above this = speech detected
+const SILENCE_DURATION_MS = 1800;   // ms of silence after speech → stop
+const NO_SPEECH_TIMEOUT_MS = 5000;  // ms total before giving up if no speech detected
+const MIN_RECORDING_MS = 800;       // minimum recording before silence check kicks in
+const MAX_RECORDING_MS = 30000;     // hard cutoff regardless of speech
+const POLL_INTERVAL_MS = 100;       // how often we poll audio levels
+
 
 interface CallMessage {
   role: "user" | "assistant";
@@ -60,21 +64,49 @@ export default function CallScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { companions, addMessage, addMemoryNote } = useCompanions();
+  const { companions, addMemoryNote, updateRelationshipLevel } = useCompanions();
+  const { authFetch, accessToken, user } = useAuth();
+  const userAge = React.useMemo(() => {
+    if (!user?.dateOfBirth) return undefined;
+    const birth = new Date(user.dateOfBirth);
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+    return age;
+  }, [user?.dateOfBirth]);
 
   const companion = companions.find((c) => c.id === id);
   const [phase, setPhase] = useState<CallPhase>("connecting");
   const [callMessages, setCallMessages] = useState<CallMessage[]>([]);
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
-  const [lastUserText, setLastUserText] = useState("");
-  const [lastAiText, setLastAiText] = useState("");
+  const [silenceCountdown, setSilenceCountdown] = useState(0);
 
   const recordingRef = useRef<Audio.Recording | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const silenceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const transcriptRef = useRef<CallMessage[]>([]);
   const scrollRef = useRef<ScrollView>(null);
+
+  // Silence detection state (all refs to avoid stale closures)
+  const lastSpokeRef = useRef<number>(0);
+  const recordingStartRef = useRef<number>(0);
+  const hasSpeechRef = useRef(false);   // true once any audio above threshold is detected
+  const isStoppingRef = useRef(false);
+  const isMutedRef = useRef(false);
+  const phaseRef = useRef<CallPhase>("connecting");
+
+  // Forward ref so the polling interval always calls the latest processRecording
+  const processRecordingRef = useRef<(() => Promise<void>) | null>(null);
+  const endCallRef = useRef<(() => Promise<void>) | null>(null);
+  const authFetchRef = useRef(authFetch);
+  const accessTokenRef = useRef(accessToken);
+
+  useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
+  useEffect(() => { authFetchRef.current = authFetch; }, [authFetch]);
+  useEffect(() => { accessTokenRef.current = accessToken; }, [accessToken]);
 
   // Animations
   const outerRingScale = useSharedValue(1);
@@ -111,13 +143,21 @@ export default function CallScreen() {
 
     if (phase === "recording") {
       innerRingScale.value = withRepeat(
-        withSequence(withTiming(1.15, { duration: 400 }), withTiming(1, { duration: 400 })),
+        withSequence(withTiming(1.2, { duration: 350 }), withTiming(1, { duration: 350 })),
         -1, false
       );
     } else {
       innerRingScale.value = withTiming(1);
     }
   }, [phase]);
+
+  const clearSilenceTimer = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearInterval(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    setSilenceCountdown(0);
+  }, []);
 
   const stopSound = useCallback(async () => {
     if (soundRef.current) {
@@ -129,31 +169,61 @@ export default function CallScreen() {
     }
   }, []);
 
-  const playTTS = useCallback(async (text: string): Promise<void> => {
+  const playTTS = useCallback(async (text: string, onStart?: () => void): Promise<void> => {
     if (!companion) return;
     const typeInfo = COMPANION_TYPES[companion.type];
-    const url = `${API_BASE}/companion/tts?text=${encodeURIComponent(text.slice(0, 600))}&voice=${typeInfo.voice}`;
+    const url = `${API_BASE}/companion/tts?text=${encodeURIComponent(text.slice(0, 600))}&voice=${typeInfo.voice}&companionId=${companion.id}`;
+    const localUri = `${FileSystem.cacheDirectory}tts_${Date.now()}.mp3`;
 
     return new Promise((resolve) => {
       const load = async () => {
+        let tempPath: string | null = null;
         try {
           if (Platform.OS !== "web") {
             await Audio.setAudioModeAsync({
               allowsRecordingIOS: false,
               playsInSilentModeIOS: true,
               staysActiveInBackground: false,
+              shouldDuckAndroid: true,
+              playThroughEarpieceAndroid: false,
             });
           }
-          const { sound } = await Audio.Sound.createAsync({ uri: url }, { shouldPlay: true });
+
+          // Download to local file — avoids iOS HLS streaming errors
+          if (Platform.OS !== "web") {
+            const dlHeaders = accessTokenRef.current
+              ? { Authorization: `Bearer ${accessTokenRef.current}` }
+              : undefined;
+            const dl = await FileSystem.downloadAsync(url, localUri, { headers: dlHeaders });
+            if (dl.status === 429) throw new Error("DAILY_LIMIT_REACHED");
+            if (dl.status !== 200) throw new Error(`TTS_HTTP_${dl.status}`);
+            tempPath = dl.uri;
+          }
+
+          const audioUri = tempPath ?? url;
+          const { sound } = await Audio.Sound.createAsync({ uri: audioUri }, { shouldPlay: true });
           soundRef.current = sound;
+          onStart?.();
           sound.setOnPlaybackStatusUpdate((status) => {
             if (!status.isLoaded) return;
             if (status.didJustFinish) {
               soundRef.current = null;
               resolve();
+              // Clean up temp file after playback
+              if (tempPath) FileSystem.deleteAsync(tempPath, { idempotent: true }).catch(() => {});
             }
           });
-        } catch {
+        } catch (err: any) {
+          if (err?.message === "DAILY_LIMIT_REACHED" || err?.message === "RATE_LIMITED") {
+            const msg = err.message === "DAILY_LIMIT_REACHED"
+              ? "You've used today's credits for this companion. Come back tomorrow!"
+              : "Too many requests. Wait a moment and try again.";
+            Alert.alert("Limit reached", msg, [{ text: "OK", onPress: () => endCallRef.current?.() }]);
+          } else if (err?.message?.startsWith("TTS_HTTP_") || err?.message === "Network request failed") {
+            Alert.alert("Voice unavailable", "Could not reach the server. Check your connection and try again.");
+          }
+          onStart?.();
+          if (tempPath) FileSystem.deleteAsync(tempPath, { idempotent: true }).catch(() => {});
           resolve();
         }
       };
@@ -164,74 +234,281 @@ export default function CallScreen() {
   const addToTranscript = useCallback((msg: CallMessage) => {
     transcriptRef.current = [...transcriptRef.current, msg];
     setCallMessages([...transcriptRef.current]);
-    if (msg.role === "user") setLastUserText(msg.content);
-    else setLastAiText(msg.content);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   }, []);
+
+  // Auto-start listening — stable (no deps), all mutable state via refs
+  const startListening = useCallback(async () => {
+    if (isMutedRef.current || Platform.OS === "web") return;
+    if (recordingRef.current) return; // guard: already recording
+
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+      });
+
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+
+      recordingRef.current = recording;
+      const now = Date.now();
+      lastSpokeRef.current = now;
+      recordingStartRef.current = now;
+      hasSpeechRef.current = false;
+      isStoppingRef.current = false;
+
+      // Poll audio levels via getStatusAsync — more reliable than setOnRecordingStatusUpdate
+      clearSilenceTimer();
+      silenceTimerRef.current = setInterval(async () => {
+        if (!recordingRef.current || isStoppingRef.current) {
+          clearSilenceTimer();
+          return;
+        }
+
+        try {
+          const status = await recordingRef.current.getStatusAsync();
+          if (!status.isRecording) {
+            clearSilenceTimer();
+            return;
+          }
+
+          const level: number = (status as any).metering ?? -100;
+          const t = Date.now();
+
+          // Update last-spoke timestamp if sound detected
+          if (level > SILENCE_THRESHOLD_DB) {
+            lastSpokeRef.current = t;
+            hasSpeechRef.current = true;
+            setSilenceCountdown(0);
+          }
+
+          const elapsed = t - recordingStartRef.current;
+          const silentFor = t - lastSpokeRef.current;
+
+          // Show countdown only after speech has been detected
+          if (hasSpeechRef.current && elapsed > MIN_RECORDING_MS && silentFor > 0) {
+            const remaining = Math.max(0, SILENCE_DURATION_MS - silentFor);
+            setSilenceCountdown(Math.ceil(remaining / 1000));
+          }
+
+          const shouldStop =
+            // User spoke and then went silent for SILENCE_DURATION_MS
+            (hasSpeechRef.current && elapsed > MIN_RECORDING_MS && silentFor >= SILENCE_DURATION_MS) ||
+            // No speech at all detected after NO_SPEECH_TIMEOUT_MS (metering may not work)
+            (!hasSpeechRef.current && elapsed >= NO_SPEECH_TIMEOUT_MS) ||
+            elapsed >= MAX_RECORDING_MS;
+
+          if (shouldStop) {
+            isStoppingRef.current = true;
+            clearSilenceTimer();
+            processRecordingRef.current?.();
+          }
+        } catch {
+          // polling error — ignore
+        }
+      }, POLL_INTERVAL_MS);
+
+      setPhase("recording");
+      phaseRef.current = "recording";
+      micBtnScale.value = withSpring(0.92, { damping: 10 });
+      await hapticsImpact(ImpactFeedbackStyle.Light);
+    } catch {
+      setPhase("idle");
+      phaseRef.current = "idle";
+      // Retry once after a delay — audio session may not have been ready
+      setTimeout(() => {
+        if (!recordingRef.current && !isMutedRef.current) startListening();
+      }, 700);
+    }
+  }, [clearSilenceTimer]); // clearSilenceTimer is stable
 
   const runAITurn = useCallback(async (userText: string) => {
     if (!companion) return;
 
-    addToTranscript({ role: "user", content: userText });
-
     setPhase("thinking");
+    phaseRef.current = "thinking";
+
     try {
-      const res = await fetch(`${API_BASE}/companion/chat-sync`, {
+      const res = await authFetchRef.current(`${API_BASE}/companion/chat-sync`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          companionId: companion.id,
           companionType: companion.type,
+          companionGender: companion.gender,
+          userAge,
+          userGender: user?.gender || undefined,
           companionName: companion.name,
           memoryNotes: companion.memoryNotes,
           customPersonality: companion.customPersonality,
+          relationshipLevel: companion.relationshipLevel,
           messages: [...transcriptRef.current],
         }),
       });
+      if (res.status === 429) {
+        const body = await res.json().catch(() => ({}));
+        const msg = body.error === "DAILY_LIMIT_REACHED"
+          ? "You've used today's credits for this companion. Come back tomorrow!"
+          : "Too many requests. Wait a moment and try again.";
+        Alert.alert("Limit reached", msg, [{ text: "OK", onPress: endCall }]);
+        return;
+      }
       const data = await res.json() as { content: string };
       const aiText = data.content || "";
 
       if (aiText) {
-        addToTranscript({ role: "assistant", content: aiText });
         setPhase("speaking");
-        await playTTS(aiText);
+        phaseRef.current = "speaking";
+        await playTTS(aiText, () => addToTranscript({ role: "assistant", content: aiText }));
       }
     } catch {
-      // silently fail turn
+      // silently fail — will resume listening below
     } finally {
       setPhase("idle");
+      phaseRef.current = "idle";
+      // Brief pause so the iOS audio session fully releases from playback
+      await new Promise<void>((r) => setTimeout(r, 250));
+      startListening();
     }
-  }, [companion, addToTranscript, playTTS]);
+  }, [companion, addToTranscript, playTTS, startListening]);
 
-  // Start call with greeting
+  // Stops the active recording and sends it through transcription → AI
+  const processRecording = useCallback(async () => {
+    clearSilenceTimer();
+    if (!recordingRef.current) {
+      setPhase("idle");
+      phaseRef.current = "idle";
+      startListening();
+      return;
+    }
+
+    micBtnScale.value = withSpring(1, { damping: 10 });
+    setSilenceCountdown(0);
+
+    try {
+      setPhase("transcribing");
+      phaseRef.current = "transcribing";
+
+      await recordingRef.current.stopAndUnloadAsync();
+      const uri = recordingRef.current.getURI();
+      recordingRef.current = null;
+
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+
+      if (!uri) throw new Error("No recording URI");
+
+      // Use XHR for file upload — Expo's global fetch rejects the RN { uri, type, name } FormData pattern
+      const data = await new Promise<{ transcript?: string }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `${API_BASE}/companion/transcribe`);
+        if (accessTokenRef.current) {
+          xhr.setRequestHeader("Authorization", `Bearer ${accessTokenRef.current}`);
+        }
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try { resolve(JSON.parse(xhr.responseText)); } catch { resolve({}); }
+          } else if (xhr.status === 429) {
+            try {
+              const body = JSON.parse(xhr.responseText);
+              reject(new Error(body.error === "DAILY_LIMIT_REACHED" ? "DAILY_LIMIT_REACHED" : "RATE_LIMITED"));
+            } catch { reject(new Error("RATE_LIMITED")); }
+          } else {
+            reject(new Error(`HTTP ${xhr.status}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error("Network error"));
+        const form = new FormData();
+        form.append("audio", { uri, type: "audio/m4a", name: "voice.m4a" } as any);
+        if (companion?.id) form.append("companionId", companion.id);
+        xhr.send(form);
+      });
+      const transcript = data.transcript?.trim();
+
+      if (transcript) {
+        addToTranscript({ role: "user", content: transcript });
+        await runAITurn(transcript);
+      } else {
+        addToTranscript({ role: "user", content: "(no speech detected)" });
+        setPhase("idle");
+        phaseRef.current = "idle";
+        startListening();
+      }
+    } catch (err: any) {
+      if (err?.message === "DAILY_LIMIT_REACHED" || err?.message === "RATE_LIMITED") {
+        const msg = err.message === "DAILY_LIMIT_REACHED"
+          ? "You've used today's credits for this companion. Come back tomorrow!"
+          : "Too many requests. Wait a moment and try again.";
+        Alert.alert("Limit reached", msg, [{ text: "OK", onPress: endCall }]);
+        return;
+      }
+      addToTranscript({ role: "user", content: `(transcription error: ${err?.message ?? "unknown"})` });
+      setPhase("idle");
+      phaseRef.current = "idle";
+      startListening();
+    }
+  }, [clearSilenceTimer, runAITurn, startListening, addToTranscript]);
+
+  // Keep processRecordingRef pointing at the latest closure
+  useEffect(() => {
+    processRecordingRef.current = processRecording;
+  }, [processRecording]);
+
+  useEffect(() => {
+    endCallRef.current = endCall;
+  }, [endCall]);
+
+  // When user toggles mute on while recording, stop listening
+  useEffect(() => {
+    if (isMuted && phaseRef.current === "recording") {
+      isStoppingRef.current = true;
+      clearSilenceTimer();
+      recordingRef.current?.stopAndUnloadAsync().catch(() => {});
+      recordingRef.current = null;
+      setPhase("idle");
+      phaseRef.current = "idle";
+    }
+  }, [isMuted, clearSilenceTimer]);
+
+  // Greeting → auto-listen
   useEffect(() => {
     if (!companion) return;
 
     const init = async () => {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await hapticsNotification(NotificationFeedbackType.Success);
 
       if (Platform.OS !== "web") {
         const { status } = await Audio.requestPermissionsAsync();
         if (status !== "granted") {
-          Alert.alert("Permission Required", "Microphone access is needed for voice calls.", [
-            { text: "OK", onPress: () => router.back() },
-          ]);
+          Alert.alert(
+            "Permission Required",
+            "Microphone access is needed for voice calls.",
+            [{ text: "OK", onPress: () => router.back() }]
+          );
           return;
         }
       }
 
-      // Greeting turn
       setPhase("thinking");
+      phaseRef.current = "thinking";
+
       try {
         const typeInfo = COMPANION_TYPES[companion.type];
         const greetingPrompt = `You just received a voice call from the user. Greet them warmly and naturally in 1 sentence. Be yourself (${typeInfo.label} companion).`;
-        const res = await fetch(`${API_BASE}/companion/chat-sync`, {
+        const res = await authFetchRef.current(`${API_BASE}/companion/chat-sync`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             companionType: companion.type,
+            companionGender: companion.gender,
+            userAge,
+            userGender: user?.gender || undefined,
             companionName: companion.name,
             memoryNotes: companion.memoryNotes,
             customPersonality: companion.customPersonality,
+            relationshipLevel: companion.relationshipLevel,
             messages: [{ role: "user", content: greetingPrompt }],
           }),
         });
@@ -239,88 +516,48 @@ export default function CallScreen() {
         const greeting = data.content || `Hey! So great to hear from you!`;
         addToTranscript({ role: "assistant", content: greeting });
         setPhase("speaking");
+        phaseRef.current = "speaking";
         await playTTS(greeting);
       } catch {
-        // skip greeting if API not available
+        // skip greeting if API unavailable
       }
-      setPhase("idle");
 
-      // Start timer
+      setPhase("idle");
+      phaseRef.current = "idle";
       timerRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
+
+      // Auto-start listening right after greeting
+      startListening();
     };
 
     init();
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      clearSilenceTimer();
       stopSound();
       recordingRef.current?.stopAndUnloadAsync().catch(() => {});
     };
   }, []);
 
-  const startRecording = useCallback(async () => {
-    if (phase !== "idle" || isMuted) return;
-    try {
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      recordingRef.current = recording;
-      setPhase("recording");
-      micBtnScale.value = withSpring(0.92, { damping: 10 });
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch {
-      Alert.alert("Error", "Could not start recording.");
-    }
-  }, [phase, isMuted]);
-
-  const stopRecording = useCallback(async () => {
-    if (phase !== "recording" || !recordingRef.current) return;
-    micBtnScale.value = withSpring(1, { damping: 10 });
-
-    try {
-      setPhase("transcribing");
-      await recordingRef.current.stopAndUnloadAsync();
-      const uri = recordingRef.current.getURI();
-      recordingRef.current = null;
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-
-      if (!uri) throw new Error("No URI");
-
-      const formData = new FormData();
-      formData.append("audio", { uri, type: "audio/m4a", name: "voice.m4a" } as any);
-
-      const res = await fetch(`${API_BASE}/companion/transcribe`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json() as { transcript?: string };
-      const transcript = data.transcript?.trim();
-
-      if (transcript) {
-        await runAITurn(transcript);
-      } else {
-        setPhase("idle");
-      }
-    } catch {
-      setPhase("idle");
-    }
-  }, [phase, runAITurn]);
-
+  // Tap mic = stop and send immediately (don't wait for silence timeout)
   const handleMicPress = () => {
     if (Platform.OS === "web") {
       Alert.alert("Voice Calls", "Voice calling is available on iOS and Android via Expo Go.");
       return;
     }
-    if (phase === "recording") stopRecording();
-    else if (phase === "idle") startRecording();
+    if (phase === "recording" && !isStoppingRef.current) {
+      isStoppingRef.current = true;
+      clearSilenceTimer();
+      processRecording();
+    }
   };
 
   const extractMemories = useCallback(
     async (msgs: CallMessage[]) => {
       if (!companion || msgs.length < 2) return;
       try {
-        const res = await fetch(`${API_BASE}/companion/extract-memory`, {
+        const res = await authFetchRef.current(`${API_BASE}/companion/extract-memory`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -339,28 +576,25 @@ export default function CallScreen() {
 
   const endCall = useCallback(async () => {
     if (timerRef.current) clearInterval(timerRef.current);
+    isStoppingRef.current = true;
+    clearSilenceTimer();
     await stopSound();
     await recordingRef.current?.stopAndUnloadAsync().catch(() => {});
+    recordingRef.current = null;
 
     if (companion && transcriptRef.current.length > 0) {
-      // Extract memories from call in the background
       extractMemories(transcriptRef.current);
 
-      // Save transcript to chat history
-      for (const msg of transcriptRef.current) {
-        const chatMsg: Message = {
-          id: Date.now().toString() + Math.random().toString(36).substr(2, 6),
-          role: msg.role,
-          content: msg.content,
-          timestamp: Date.now(),
-        };
-        await addMessage(companion.id, chatMsg);
+      const aiTurns = transcriptRef.current.filter((m) => m.role === "assistant").length;
+      if (aiTurns >= 1) {
+        const callBonus = aiTurns >= 4 ? 6 : 3;
+        await updateRelationshipLevel(companion.id, callBonus);
       }
     }
 
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    await hapticsNotification(NotificationFeedbackType.Warning);
     router.back();
-  }, [companion, addMessage, stopSound, extractMemories]);
+  }, [companion, updateRelationshipLevel, stopSound, clearSilenceTimer, extractMemories]);
 
   if (!companion) {
     return (
@@ -381,7 +615,10 @@ export default function CallScreen() {
   const durationStr = `${String(Math.floor(duration / 60)).padStart(2, "0")}:${String(duration % 60).padStart(2, "0")}`;
 
   const micActive = phase === "recording";
-  const micDisabled = !["idle", "recording"].includes(phase) || isMuted;
+  const micDisabled = phase !== "recording" || isMuted;
+
+  // Silence countdown hint (shows "sending in 1s", "sending in 2s", etc.)
+  const showCountdown = phase === "recording" && silenceCountdown > 0 && silenceCountdown <= 3;
 
   return (
     <View style={styles.root}>
@@ -392,7 +629,6 @@ export default function CallScreen() {
         end={{ x: 0.8, y: 1 }}
       />
 
-      {/* Tinted glow from companion color */}
       <View
         style={[
           styles.colorGlow,
@@ -414,7 +650,6 @@ export default function CallScreen() {
 
       {/* Avatar area */}
       <View style={styles.avatarArea}>
-        {/* Outer pulsing ring (speaking) */}
         <Animated.View
           style={[
             styles.outerRing,
@@ -422,15 +657,16 @@ export default function CallScreen() {
             outerRingStyle,
           ]}
         />
-        {/* Inner ring (recording) */}
         <Animated.View
           style={[
             styles.innerRing,
-            { borderColor: "#ffffff" },
+            {
+              borderColor:
+                phase === "recording" ? "#ef4444" : "#ffffff",
+            },
             innerRingStyle,
           ]}
         />
-        {/* Avatar */}
         <LinearGradient
           colors={companion.avatarGradient}
           style={styles.avatar}
@@ -471,9 +707,7 @@ export default function CallScreen() {
             },
           ]}
         >
-          {phase === "recording" && (
-            <View style={styles.recDot} />
-          )}
+          {phase === "recording" && <View style={styles.recDot} />}
           <Text
             style={[
               styles.statusText,
@@ -490,6 +724,15 @@ export default function CallScreen() {
             {PHASE_LABELS[phase]}
           </Text>
         </View>
+
+        {/* Dynamic hint below status pill */}
+        <Text style={styles.hintText}>
+          {showCountdown
+            ? `Sending in ${silenceCountdown}s · tap mic to send now`
+            : phase === "recording"
+            ? "Speak now · tap mic to send early"
+            : " "}
+        </Text>
       </View>
 
       {/* Transcript */}
@@ -524,10 +767,12 @@ export default function CallScreen() {
               style={[
                 styles.transcriptText,
                 {
-                  color:
-                    msg.role === "user"
-                      ? "rgba(255,255,255,0.75)"
-                      : "rgba(255,255,255,0.9)",
+                  color: msg.content.startsWith("(")
+                    ? "rgba(255,255,255,0.3)"
+                    : msg.role === "user"
+                    ? "rgba(255,255,255,0.75)"
+                    : "rgba(255,255,255,0.9)",
+                  fontStyle: msg.content.startsWith("(") ? "italic" : "normal",
                 },
               ]}
               numberOfLines={3}
@@ -545,8 +790,18 @@ export default function CallScreen() {
       <View style={[styles.controls, { paddingBottom: insets.bottom + 32 }]}>
         {/* Mute */}
         <Pressable
-          onPress={() => { setIsMuted((m) => !m); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-          style={[styles.sideBtn, { backgroundColor: isMuted ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.08)" }]}
+          onPress={() => {
+            setIsMuted((m) => !m);
+            hapticsImpact(ImpactFeedbackStyle.Light);
+          }}
+          style={[
+            styles.sideBtn,
+            {
+              backgroundColor: isMuted
+                ? "rgba(255,255,255,0.2)"
+                : "rgba(255,255,255,0.08)",
+            },
+          ]}
         >
           <Ionicons
             name={isMuted ? "mic-off" : "mic-outline"}
@@ -555,7 +810,7 @@ export default function CallScreen() {
           />
         </Pressable>
 
-        {/* Main mic button */}
+        {/* Main button: send-early when recording, visual indicator otherwise */}
         <Animated.View style={micBtnStyle}>
           <Pressable
             onPress={handleMicPress}
@@ -567,7 +822,7 @@ export default function CallScreen() {
                 micActive
                   ? ["#ef4444", "#dc2626"]
                   : micDisabled
-                  ? ["#333", "#222"]
+                  ? ["#2a2a2a", "#1a1a1a"]
                   : companion.avatarGradient
               }
               style={styles.micBtn}
@@ -577,7 +832,7 @@ export default function CallScreen() {
               <Ionicons
                 name={micActive ? "stop" : "mic"}
                 size={30}
-                color="#ffffff"
+                color={micDisabled && !micActive ? "rgba(255,255,255,0.2)" : "#ffffff"}
               />
             </LinearGradient>
           </Pressable>
@@ -586,14 +841,25 @@ export default function CallScreen() {
         {/* End call */}
         <Pressable
           onPress={endCall}
-          style={[styles.sideBtn, { backgroundColor: "#ef444422", borderColor: "#ef444444", borderWidth: 1 }]}
+          style={[
+            styles.sideBtn,
+            {
+              backgroundColor: "#ef444422",
+              borderColor: "#ef444444",
+              borderWidth: 1,
+            },
+          ]}
         >
-          <Ionicons name="call" size={22} color="#ef4444" style={{ transform: [{ rotate: "135deg" }] }} />
+          <Ionicons
+            name="call"
+            size={22}
+            color="#ef4444"
+            style={{ transform: [{ rotate: "135deg" }] }}
+          />
         </Pressable>
       </View>
 
-      {/* Web notice */}
-      {Platform.OS === "web" && phase === "idle" && (
+      {Platform.OS === "web" && (
         <View style={styles.webNotice}>
           <Ionicons name="information-circle-outline" size={14} color="rgba(255,255,255,0.4)" />
           <Text style={styles.webNoticeText}>
@@ -692,6 +958,8 @@ const styles = StyleSheet.create({
   statusArea: {
     alignItems: "center",
     marginTop: 16,
+    gap: 6,
+    minHeight: 52,
   },
   statusPill: {
     flexDirection: "row",
@@ -713,24 +981,25 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     fontWeight: "500" as const,
   },
+  hintText: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: "rgba(255,255,255,0.3)",
+    letterSpacing: 0.2,
+    minHeight: 16,
+  },
   transcript: {
     flex: 1,
-    marginTop: 20,
+    marginTop: 12,
     marginHorizontal: 24,
   },
   transcriptContent: {
     gap: 10,
     paddingBottom: 8,
   },
-  transcriptLine: {
-    gap: 2,
-  },
-  transcriptUser: {
-    alignItems: "flex-end",
-  },
-  transcriptAi: {
-    alignItems: "flex-start",
-  },
+  transcriptLine: { gap: 2 },
+  transcriptUser: { alignItems: "flex-end" },
+  transcriptAi: { alignItems: "flex-start" },
   transcriptLabel: {
     fontSize: 10,
     fontFamily: "Inter_500Medium",

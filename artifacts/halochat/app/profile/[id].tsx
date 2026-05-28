@@ -18,15 +18,19 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TypeBadge } from "@/components/TypeBadge";
 import { COMPANION_TYPES, useCompanions } from "@/context/CompanionContext";
 import { useColors } from "@/hooks/useColors";
+import { hapticsNotification } from "@/utils/haptics";
 
 export default function ProfileScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { companions, deleteCompanion, clearMessages, addMemoryNote, removeMemoryNote } = useCompanions();
+  const { companions, updateCompanion, deleteCompanion, clearMessages } = useCompanions();
 
   const companion = companions.find((c) => c.id === id);
-  const [newNote, setNewNote] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPersonality, setEditPersonality] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
   const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
@@ -47,11 +51,25 @@ export default function ProfileScreen() {
     .join("")
     .toUpperCase();
 
-  const handleAddNote = async () => {
-    if (!newNote.trim()) return;
-    await addMemoryNote(companion.id, newNote.trim());
-    setNewNote("");
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  const handleStartEdit = () => {
+    setEditName(companion!.name);
+    setEditPersonality(companion!.customPersonality ?? "");
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editName.trim() || isSaving) return;
+    setIsSaving(true);
+    try {
+      await updateCompanion(companion!.id, {
+        name: editName.trim(),
+        customPersonality: editPersonality.trim(), // empty string = clear
+      });
+      hapticsNotification();
+      setIsEditing(false);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleClearChat = () => {
@@ -76,7 +94,7 @@ export default function ProfileScreen() {
           style: "destructive",
           onPress: async () => {
             await deleteCompanion(companion.id);
-            router.replace("/(tabs)/");
+            router.replace("/(tabs)");
           },
         },
       ]
@@ -131,12 +149,81 @@ export default function ProfileScreen() {
           <Text style={[styles.heroSub, { color: "rgba(255,255,255,0.75)" }]}>
             {typeInfo.description}
           </Text>
+          <Pressable
+            onPress={handleStartEdit}
+            style={({ pressed }) => [styles.editHeroBtn, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <Ionicons name="pencil-outline" size={14} color="rgba(255,255,255,0.9)" />
+            <Text style={styles.editHeroBtnText}>Edit</Text>
+          </Pressable>
         </LinearGradient>
 
+        {/* Edit form */}
+        {isEditing && (
+          <View style={[styles.editForm, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.editFormTitle, { color: colors.foreground }]}>Edit Companion</Text>
+
+            <Text style={[styles.editFieldLabel, { color: colors.mutedForeground }]}>NAME</Text>
+            <View style={[styles.editFieldBox, { backgroundColor: colors.background, borderColor: editName.trim() ? colors.primary : colors.border }]}>
+              <TextInput
+                style={[styles.editFieldInput, { color: colors.foreground }]}
+                value={editName}
+                onChangeText={setEditName}
+                maxLength={30}
+                returnKeyType="done"
+                placeholder="Companion name..."
+                placeholderTextColor={colors.mutedForeground}
+                autoFocus
+              />
+            </View>
+
+            <Text style={[styles.editFieldLabel, { color: colors.mutedForeground }]}>CUSTOM PERSONALITY (OPTIONAL)</Text>
+            <View style={[styles.editFieldBox, styles.editFieldBoxMulti, { backgroundColor: colors.background, borderColor: colors.border }]}>
+              <TextInput
+                style={[styles.editFieldInput, styles.editFieldMulti, { color: colors.foreground }]}
+                value={editPersonality}
+                onChangeText={setEditPersonality}
+                maxLength={500}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+                placeholder="Add a custom personality description..."
+                placeholderTextColor={colors.mutedForeground}
+              />
+            </View>
+            <Text style={[styles.editCharCount, { color: colors.mutedForeground }]}>{editPersonality.length}/500</Text>
+
+            <View style={styles.editActions}>
+              <Pressable
+                onPress={() => setIsEditing(false)}
+                style={({ pressed }) => [styles.editCancelBtn, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+              >
+                <Text style={[styles.editCancelText, { color: colors.mutedForeground }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleSaveEdit}
+                disabled={!editName.trim() || isSaving}
+                style={({ pressed }) => [{ opacity: pressed || isSaving ? 0.7 : 1, flex: 1 }]}
+              >
+                <LinearGradient
+                  colors={companion.avatarGradient}
+                  style={styles.editSaveBtn}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <Text style={styles.editSaveText}>{isSaving ? "Saving…" : "Save Changes"}</Text>
+                </LinearGradient>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
         <View style={styles.statsRow}>
-          <StatCard label="Messages" value={String(companion.messageCount)} colors={colors} />
           <StatCard label="Bond" value={`${relPercent}%`} colors={colors} />
           <StatCard label="Status" value={relLabel} colors={colors} />
+          {(companion.streak ?? 0) > 1 && (
+            <StatCard label="Streak" value={`🔥 ${companion.streak}d`} colors={colors} />
+          )}
         </View>
 
         <View style={[styles.section, { paddingHorizontal: 20 }]}>
@@ -157,74 +244,32 @@ export default function ProfileScreen() {
         </View>
 
         <View style={[styles.section, { paddingHorizontal: 20 }]}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-              Memory
-            </Text>
-            {companion.memoryNotes.length > 0 && (
-              <View style={[styles.memoryCountBadge, { backgroundColor: `${colors.primary}18` }]}>
-                <Ionicons name="sparkles" size={11} color={colors.primary} />
-                <Text style={[styles.memoryCountText, { color: colors.primary }]}>
-                  {companion.memoryNotes.length} facts learned
-                </Text>
-              </View>
-            )}
-          </View>
-          {companion.memoryNotes.length === 0 ? (
-            <View style={[styles.emptyMemory, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Ionicons name="sparkles-outline" size={22} color={colors.mutedForeground} />
-              <Text style={[styles.emptyMemoryText, { color: colors.mutedForeground }]}>
-                No memories yet. Chat or call to let {companion.name} learn about you.
-              </Text>
-            </View>
-          ) : (
-            companion.memoryNotes.map((note, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.noteChip,
-                  { backgroundColor: colors.card, borderColor: colors.border },
-                ]}
-              >
-                <Ionicons name="sparkles" size={13} color={colors.primary} />
-                <Text style={[styles.noteText, { color: colors.foreground, flex: 1 }]}>
-                  {note}
-                </Text>
-                <Pressable
-                  onPress={() => removeMemoryNote(companion.id, i)}
-                  hitSlop={8}
-                  style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
-                >
-                  <Ionicons name="close-circle-outline" size={16} color={colors.mutedForeground} />
-                </Pressable>
-              </View>
-            ))
-          )}
-        </View>
-
-        <View style={[styles.section, { paddingHorizontal: 20 }]}>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-            Add Memory
-          </Text>
-          <View
-            style={[
-              styles.noteInput,
-              { backgroundColor: colors.card, borderColor: colors.border },
-            ]}
+          <Pressable
+            onPress={() => router.push(`/memories/${companion.id}`)}
+            style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
           >
-            <TextInput
-              style={[styles.noteInputText, { color: colors.foreground }]}
-              placeholder="Something to remember..."
-              placeholderTextColor={colors.mutedForeground}
-              value={newNote}
-              onChangeText={setNewNote}
-              returnKeyType="done"
-              onSubmitEditing={handleAddNote}
-            />
-            <Pressable onPress={handleAddNote}>
-              <Ionicons name="add-circle" size={28} color={colors.primary} />
-            </Pressable>
-          </View>
+            <View style={[styles.memoriesBtn, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <LinearGradient
+                colors={companion.avatarGradient}
+                style={styles.memoriesIcon}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Ionicons name="sparkles" size={18} color="#FFFFFF" />
+              </LinearGradient>
+              <View style={styles.memoriesBtnBody}>
+                <Text style={[styles.memoriesBtnTitle, { color: colors.foreground }]}>
+                  Memories
+                </Text>
+                <Text style={[styles.memoriesBtnSub, { color: colors.mutedForeground }]}>
+                  {companion.memoryNotes.length === 0
+                    ? "Nothing collected yet"
+                    : `${companion.memoryNotes.length} thing${companion.memoryNotes.length !== 1 ? "s" : ""} learned about you`}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+            </View>
+          </Pressable>
         </View>
 
         <View style={[styles.actions, { paddingHorizontal: 20 }]}>
@@ -373,62 +418,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_400Regular",
   },
-  sectionHeaderRow: {
+  memoriesBtn: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-  },
-  memoryCountBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  memoryCountText: {
-    fontSize: 11,
-    fontFamily: "Inter_500Medium",
-    fontWeight: "500" as const,
-  },
-  emptyMemory: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    padding: 14,
-    borderRadius: 12,
+    gap: 14,
+    padding: 16,
+    borderRadius: 18,
     borderWidth: 1,
   },
-  emptyMemoryText: {
+  memoriesIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  memoriesBtnBody: {
+    flex: 1,
+    gap: 2,
+  },
+  memoriesBtnTitle: {
+    fontSize: 15,
+    fontWeight: "600" as const,
+    fontFamily: "Inter_600SemiBold",
+  },
+  memoriesBtnSub: {
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    flex: 1,
-    lineHeight: 18,
-  },
-  noteChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  noteText: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    flex: 1,
-  },
-  noteInput: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
-  noteInputText: {
-    flex: 1,
-    fontSize: 14,
     fontFamily: "Inter_400Regular",
   },
   actions: {
@@ -467,5 +483,86 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Inter_500Medium",
     fontWeight: "500" as const,
+  },
+  editHeroBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
+  editHeroBtnText: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.9)",
+    fontFamily: "Inter_500Medium",
+    fontWeight: "500" as const,
+  },
+  editForm: {
+    marginHorizontal: 20,
+    marginTop: 12,
+    padding: 18,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 10,
+  },
+  editFormTitle: {
+    fontSize: 16,
+    fontWeight: "600" as const,
+    fontFamily: "Inter_600SemiBold",
+    marginBottom: 2,
+  },
+  editFieldLabel: {
+    fontSize: 11,
+    fontWeight: "600" as const,
+    fontFamily: "Inter_600SemiBold",
+    letterSpacing: 1,
+    marginBottom: -4,
+  },
+  editFieldBox: {
+    borderRadius: 14,
+    borderWidth: 1.5,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  editFieldBoxMulti: { paddingVertical: 10 },
+  editFieldInput: {
+    fontSize: 15,
+    fontFamily: "Inter_400Regular",
+  },
+  editFieldMulti: { minHeight: 72 },
+  editCharCount: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    textAlign: "right",
+    marginTop: -6,
+  },
+  editActions: { flexDirection: "row", gap: 10, marginTop: 4 },
+  editCancelBtn: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  editCancelText: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    fontWeight: "500" as const,
+  },
+  editSaveBtn: {
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  editSaveText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
   },
 });

@@ -76,7 +76,7 @@ export default function ExploreScreen() {
 
         <View style={styles.featuredSection}>
           <LinearGradient
-            colors={["#A855F7", "#EC4899"]}
+            colors={["#6B5E45", "#9B7A50"]}
             style={styles.featuredCard}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}

@@ -87,6 +87,9 @@ export function CompanionCard({ companion, onPress, onCallPress, onLongPress }: 
             <Text style={[styles.name, { color: colors.foreground }]} numberOfLines={1}>
               {companion.name}
             </Text>
+            {companion.pinned && (
+              <Ionicons name="pin" size={12} color={colors.primary} style={{ marginRight: 2 }} />
+            )}
             {timeAgo && (
               <Text style={[styles.time, { color: colors.mutedForeground }]}>
                 {timeAgo}
@@ -101,6 +104,11 @@ export function CompanionCard({ companion, onPress, onCallPress, onLongPress }: 
             <Text style={[styles.relLabel, { color: colors.mutedForeground }]}>
               {relLabel}
             </Text>
+            {(companion.streak ?? 0) > 1 && (
+              <View style={[styles.streakBadge, { backgroundColor: "rgba(251,146,60,0.12)" }]}>
+                <Text style={styles.streakText}>🔥 {companion.streak}</Text>
+              </View>
+            )}
           </View>
 
           {companion.lastMessage ? (
@@ -219,6 +227,8 @@ const styles = StyleSheet.create({
   bondRow: { marginTop: 6 },
   bondTrack: { height: 3, borderRadius: 2, overflow: "hidden" },
   bondFill: { height: 3, borderRadius: 2 },
+  streakBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
+  streakText: { fontSize: 11, fontFamily: "Inter_500Medium" },
   rightActions: {
     flexDirection: "row",
     alignItems: "center",

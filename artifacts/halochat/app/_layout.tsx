@@ -6,19 +6,31 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
+import { NativeModules } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { CompanionProvider } from "@/context/CompanionContext";
+import { ThemeProvider } from "@/context/ThemeContext";
+import { registerPushToken } from "@/utils/notifications";
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
+
+function PushTokenRegistrar() {
+  const { isAuthenticated, authFetch } = useAuth();
+  useEffect(() => {
+    if (isAuthenticated) registerPushToken(authFetch);
+  }, [isAuthenticated]);
+  return null;
+}
 
 function RootLayoutNav() {
   return (
@@ -26,6 +38,7 @@ function RootLayoutNav() {
       <Stack.Screen name="index" />
       <Stack.Screen name="onboarding" />
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="auth" />
       <Stack.Screen
         name="create"
         options={{
@@ -35,6 +48,7 @@ function RootLayoutNav() {
       />
       <Stack.Screen name="chat/[id]" />
       <Stack.Screen name="profile/[id]" />
+      <Stack.Screen name="memories/[id]" />
       <Stack.Screen
         name="call/[id]"
         options={{
@@ -61,21 +75,58 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
-  if (!fontsLoaded && !fontError) return null;
+  useEffect(() => {
+    if (!NativeModules.ExpoPushTokenManager) return;
+
+    let sub: { remove: () => void } | null = null;
+    try {
+      const Notifications = require("expo-notifications");
+
+      sub = Notifications.addNotificationResponseReceivedListener(
+        (response: any) => {
+          const data = response.notification.request.content.data;
+          if (data?.companionId && data?.screen === "chat") {
+            router.push(`/chat/${data.companionId}`);
+          }
+        }
+      );
+
+      Notifications.getLastNotificationResponseAsync()
+        .then((response: any) => {
+          if (!response) return;
+          const data = response.notification.request.content.data;
+          if (data?.companionId && data?.screen === "chat") {
+            router.push(`/chat/${data.companionId}`);
+          }
+        })
+        .catch(() => {});
+    } catch {
+      // expo-notifications not available
+    }
+
+    return () => {
+      try { sub?.remove(); } catch { /* ignore */ }
+    };
+  }, []);
 
   return (
-    <SafeAreaProvider>
-      <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <KeyboardProvider>
-              <CompanionProvider>
-                <RootLayoutNav />
-              </CompanionProvider>
-            </KeyboardProvider>
-          </GestureHandlerRootView>
-        </QueryClientProvider>
-      </ErrorBoundary>
-    </SafeAreaProvider>
+    <ThemeProvider>
+      <SafeAreaProvider>
+        <ErrorBoundary>
+          <QueryClientProvider client={queryClient}>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <KeyboardProvider>
+                <AuthProvider>
+                  <PushTokenRegistrar />
+                  <CompanionProvider>
+                    <RootLayoutNav />
+                  </CompanionProvider>
+                </AuthProvider>
+              </KeyboardProvider>
+            </GestureHandlerRootView>
+          </QueryClientProvider>
+        </ErrorBoundary>
+      </SafeAreaProvider>
+    </ThemeProvider>
   );
 }

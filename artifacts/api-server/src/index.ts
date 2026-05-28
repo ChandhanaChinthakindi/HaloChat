@@ -1,5 +1,19 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { startCheckinJob } from "./jobs/checkin";
+
+const requiredEnv = [
+  "OPENAI_API_KEY",
+  "JWT_SECRET",
+  "JWT_REFRESH_SECRET",
+  "DATABASE_URL",
+] as const;
+
+for (const key of requiredEnv) {
+  if (!process.env[key]) {
+    throw new Error(`${key} is required but was not set. Server will not start without it.`);
+  }
+}
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +36,5 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+  startCheckinJob();
 });
