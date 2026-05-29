@@ -170,7 +170,7 @@ export default function CompanionsScreen() {
           )}
 
           <Pressable
-            onPress={() => router.push("/create")}
+            onPress={() => router.push("/(tabs)/explore")}
             style={({ pressed }) => [styles.addButton, { opacity: pressed ? 0.8 : 1 }]}
           >
             <LinearGradient
@@ -291,7 +291,7 @@ function EmptyState() {
         Create your first AI companion to begin your journey
       </Text>
       <Pressable
-        onPress={() => router.push("/create")}
+        onPress={() => router.push("/(tabs)/explore")}
         style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
       >
         <LinearGradient
