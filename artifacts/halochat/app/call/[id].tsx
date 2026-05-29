@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
-import * as FileSystem from "expo-file-system/legacy";
 import { hapticsImpact, hapticsNotification } from "@/utils/haptics";
 import { ImpactFeedbackStyle, NotificationFeedbackType } from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
@@ -237,11 +236,9 @@ export default function CallScreen() {
     if (!companion) return;
     const typeInfo = COMPANION_TYPES[companion.type];
     const url = `${API_BASE}/companion/tts?text=${encodeURIComponent(text.slice(0, 600))}&voice=${typeInfo.voice}&companionId=${companion.id}`;
-    const localUri = `${FileSystem.cacheDirectory}tts_${Date.now()}.mp3`;
 
     return new Promise((resolve) => {
       const load = async () => {
-        let tempPath: string | null = null;
         try {
           if (Platform.OS !== "web") {
             const speakerOn = isSpeakerOnRef.current;
@@ -252,54 +249,40 @@ export default function CallScreen() {
               shouldDuckAndroid: true,
               playThroughEarpieceAndroid: !speakerOn,
             });
-
-            // FileSystem.downloadAsync with auth header — avoids manual btoa conversion
-            // which is O(n²) and can silently fail on large audio files.
-            let result = await FileSystem.downloadAsync(url, localUri, {
-              headers: accessTokenRef.current ? { Authorization: `Bearer ${accessTokenRef.current}` } : {},
-            });
-            console.log("[TTS] Download status:", result.status);
-
-            // Token expired — refresh once and retry
-            if (result.status === 401) {
-              await authFetchRef.current(`${API_BASE}/auth/me`).catch(() => {});
-              result = await FileSystem.downloadAsync(url, localUri, {
-                headers: accessTokenRef.current ? { Authorization: `Bearer ${accessTokenRef.current}` } : {},
-              });
-            }
-
-            if (result.status === 429) throw new Error("DAILY_LIMIT_REACHED");
-            if (result.status >= 400) throw new Error(`TTS_HTTP_${result.status}`);
-            tempPath = localUri;
           }
 
-          const audioUri = tempPath ?? url;
-          console.log("[TTS] Loading sound from:", audioUri);
+          // Stream audio directly from URL with auth header — no file download needed.
+          // expo-av passes headers to AVPlayer (iOS) / MediaPlayer (Android) natively.
+          const token = accessTokenRef.current;
+          const source = {
+            uri: url,
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          };
 
-          // Create without shouldPlay to avoid race: handler must be registered before playback starts
-          const { sound } = await Audio.Sound.createAsync({ uri: audioUri }, { shouldPlay: false });
+          console.log("[TTS] Loading sound...");
+          const { sound } = await Audio.Sound.createAsync(source, { shouldPlay: false });
           soundRef.current = sound;
           onStart?.();
 
+          // Register handler BEFORE playAsync so we never miss didJustFinish
           sound.setOnPlaybackStatusUpdate((status) => {
             if (!status.isLoaded) {
               if ((status as any).error) {
-                console.warn("[TTS] Sound load error:", (status as any).error);
+                console.warn("[TTS] Sound error:", (status as any).error);
                 soundRef.current = null;
-                if (tempPath) FileSystem.deleteAsync(tempPath, { idempotent: true }).catch(() => {});
                 resolve();
               }
               return;
             }
             if (status.didJustFinish) {
+              console.log("[TTS] Finished");
               soundRef.current = null;
               resolve();
-              if (tempPath) FileSystem.deleteAsync(tempPath, { idempotent: true }).catch(() => {});
             }
           });
 
           await sound.playAsync();
-          console.log("[TTS] Playback started");
+          console.log("[TTS] Playing");
         } catch (err: any) {
           console.warn("[TTS] Error:", err?.message ?? err);
           if (err?.message === "DAILY_LIMIT_REACHED" || err?.message === "RATE_LIMITED") {
@@ -307,14 +290,8 @@ export default function CallScreen() {
               ? "You've used today's credits for this companion. Come back tomorrow!"
               : "Too many requests. Wait a moment and try again.";
             Alert.alert("Limit reached", msg, [{ text: "OK", onPress: () => endCallRef.current?.() }]);
-          } else if (err?.message?.startsWith("TTS_HTTP_") || err?.message === "Network request failed") {
-            Alert.alert(
-              "Voice unavailable",
-              `Could not load audio (${err.message}). Check your connection and that the server is running.`
-            );
           }
           onStart?.();
-          if (tempPath) FileSystem.deleteAsync(tempPath, { idempotent: true }).catch(() => {});
           resolve();
         }
       };
@@ -973,28 +950,6 @@ export default function CallScreen() {
 
       {/* Controls */}
       <View style={[styles.controls, { paddingBottom: insets.bottom + 32 }]}>
-        {/* Mute */}
-        <Pressable
-          onPress={() => {
-            setIsMuted((m) => !m);
-            hapticsImpact(ImpactFeedbackStyle.Light);
-          }}
-          style={[
-            styles.sideBtn,
-            {
-              backgroundColor: isMuted
-                ? "rgba(255,255,255,0.2)"
-                : "rgba(255,255,255,0.08)",
-            },
-          ]}
-        >
-          <Ionicons
-            name={isMuted ? "mic-off" : "mic-outline"}
-            size={22}
-            color={isMuted ? "#ffffff" : "rgba(255,255,255,0.6)"}
-          />
-        </Pressable>
-
         {/* Speaker toggle */}
         <Pressable
           onPress={toggleSpeaker}
