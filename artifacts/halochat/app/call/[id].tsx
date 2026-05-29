@@ -6,6 +6,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -140,19 +141,6 @@ export default function CallScreen() {
   const [isMuted, setIsMuted] = useState(false);
   const [silenceCountdown, setSilenceCountdown] = useState(0);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
-  const [callAlert, setCallAlert] = useState<{
-    title: string;
-    message?: string;
-    buttons: Array<{ text: string; style?: "default" | "destructive" | "cancel"; onPress?: () => void }>;
-  } | null>(null);
-
-  const showCallAlert = useCallback((
-    title: string,
-    message?: string,
-    buttons?: Array<{ text: string; style?: "default" | "destructive" | "cancel"; onPress?: () => void }>
-  ) => {
-    setCallAlert({ title, message, buttons: buttons ?? [{ text: "OK" }] });
-  }, []);
 
   const recordingRef = useRef<Audio.Recording | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
@@ -301,7 +289,7 @@ export default function CallScreen() {
             const msg = err.message === "DAILY_LIMIT_REACHED"
               ? "You've used today's credits for this companion. Come back tomorrow!"
               : "Too many requests. Wait a moment and try again.";
-            showCallAlert("Limit reached", msg, [{ text: "OK", onPress: () => endCallRef.current?.() }]);
+            Alert.alert("Limit reached", msg, [{ text: "OK", onPress: () => endCallRef.current?.() }]);
           }
           onStart?.();
           resolve();
@@ -309,7 +297,7 @@ export default function CallScreen() {
       };
       load();
     });
-  }, [companion, showCallAlert]);
+  }, [companion]);
 
   const addToTranscript = useCallback((msg: CallMessage) => {
     transcriptRef.current = [...transcriptRef.current, msg];
@@ -428,13 +416,23 @@ export default function CallScreen() {
       consecutiveSilencesRef.current = 0;
       setPhase("idle");
       phaseRef.current = "idle";
-      showCallAlert(
+      Alert.alert(
         "Are you still there?",
         "I haven't heard anything for a while.",
         [
-          { text: "Continue", onPress: () => startListening() },
-          { text: "End Call", style: "destructive", onPress: () => endCallRef.current?.() },
-        ]
+          {
+            text: "Continue",
+            onPress: () => {
+              startListening();
+            },
+          },
+          {
+            text: "End Call",
+            style: "destructive",
+            onPress: () => endCallRef.current?.(),
+          },
+        ],
+        { cancelable: false }
       );
     } else {
       const response = SILENCE_RESPONSES[Math.floor(Math.random() * SILENCE_RESPONSES.length)];
@@ -447,7 +445,7 @@ export default function CallScreen() {
       await new Promise<void>((r) => setTimeout(r, 250));
       startListening();
     }
-  }, [playTTS, addToTranscript, startListening, showCallAlert]);
+  }, [playTTS, addToTranscript, startListening]);
 
   const runAITurn = useCallback(async (userText: string) => {
     if (!companion) return;
@@ -477,7 +475,7 @@ export default function CallScreen() {
         const msg = body.error === "DAILY_LIMIT_REACHED"
           ? "You've used today's credits for this companion. Come back tomorrow!"
           : "Too many requests. Wait a moment and try again.";
-        showCallAlert("Limit reached", msg, [{ text: "OK", onPress: () => endCallRef.current?.() }]);
+        Alert.alert("Limit reached", msg, [{ text: "OK", onPress: () => endCallRef.current?.() }]);
         return;
       }
       const data = await res.json() as { content: string };
@@ -497,7 +495,7 @@ export default function CallScreen() {
       await new Promise<void>((r) => setTimeout(r, 250));
       startListening();
     }
-  }, [companion, addToTranscript, playTTS, startListening, showCallAlert]);
+  }, [companion, addToTranscript, playTTS, startListening]);
 
   // Stops the active recording and sends it through transcription → AI
   const processRecording = useCallback(async () => {
@@ -590,7 +588,7 @@ export default function CallScreen() {
         const msg = err.message === "DAILY_LIMIT_REACHED"
           ? "You've used today's credits for this companion. Come back tomorrow!"
           : "Too many requests. Wait a moment and try again.";
-        showCallAlert("Limit reached", msg, [{ text: "OK", onPress: () => endCallRef.current?.() }]);
+        Alert.alert("Limit reached", msg, [{ text: "OK", onPress: () => endCallRef.current?.() }]);
         return;
       }
       if (!isAliveRef.current) return;
@@ -599,7 +597,7 @@ export default function CallScreen() {
       phaseRef.current = "idle";
       startListening();
     }
-  }, [clearSilenceTimer, runAITurn, handleSilence, startListening, addToTranscript, showCallAlert]);
+  }, [clearSilenceTimer, runAITurn, handleSilence, startListening, addToTranscript]);
 
   // Keep processRecordingRef pointing at the latest closure
   useEffect(() => {
@@ -633,7 +631,7 @@ export default function CallScreen() {
       if (Platform.OS !== "web") {
         const { status } = await Audio.requestPermissionsAsync();
         if (status !== "granted") {
-          showCallAlert(
+          Alert.alert(
             "Permission Required",
             "Microphone access is needed for voice calls.",
             [{ text: "OK", onPress: () => router.back() }]
@@ -696,7 +694,7 @@ export default function CallScreen() {
   // Tap mic = stop and send immediately (don't wait for silence timeout)
   const handleMicPress = () => {
     if (Platform.OS === "web") {
-      showCallAlert("Voice Calls", "Voice calling is available on iOS and Android via Expo Go.");
+      Alert.alert("Voice Calls", "Voice calling is available on iOS and Android via Expo Go.");
       return;
     }
     if (phase === "recording" && !isStoppingRef.current) {
@@ -1028,153 +1026,9 @@ export default function CallScreen() {
           </Text>
         </View>
       )}
-
-      {/* Themed alert overlay */}
-      {callAlert && (
-        <CallAlertModal
-          title={callAlert.title}
-          message={callAlert.message}
-          buttons={callAlert.buttons}
-          companionGradient={companion.avatarGradient}
-          onClose={() => setCallAlert(null)}
-        />
-      )}
     </View>
   );
 }
-
-function CallAlertModal({
-  title,
-  message,
-  buttons,
-  companionGradient,
-  onClose,
-}: {
-  title: string;
-  message?: string;
-  buttons: Array<{ text: string; style?: "default" | "destructive" | "cancel"; onPress?: () => void }>;
-  companionGradient: string[];
-  onClose: () => void;
-}) {
-  const overlayOpacity = useSharedValue(0);
-  const cardScale = useSharedValue(0.88);
-
-  useEffect(() => {
-    overlayOpacity.value = withTiming(1, { duration: 200 });
-    cardScale.value = withSpring(1, { damping: 18, stiffness: 220 });
-  }, []);
-
-  const overlayStyle = useAnimatedStyle(() => ({ opacity: overlayOpacity.value }));
-  const cardStyle = useAnimatedStyle(() => ({ transform: [{ scale: cardScale.value }] }));
-
-  const handlePress = (onPress?: () => void) => {
-    onClose();
-    onPress?.();
-  };
-
-  return (
-    <Animated.View style={[StyleSheet.absoluteFill, alertStyles.overlay, overlayStyle]}>
-      <Pressable style={StyleSheet.absoluteFill} onPress={() => {}} />
-      <Animated.View style={[alertStyles.card, cardStyle]}>
-        <Text style={alertStyles.title}>{title}</Text>
-        {message && <Text style={alertStyles.message}>{message}</Text>}
-        <View style={alertStyles.buttons}>
-          {buttons.map((btn, i) => (
-            <Pressable
-              key={i}
-              onPress={() => handlePress(btn.onPress)}
-              style={({ pressed }) => [alertStyles.btn, { opacity: pressed ? 0.75 : 1 }]}
-            >
-              <LinearGradient
-                colors={
-                  btn.style === "destructive"
-                    ? ["#ef4444", "#dc2626"]
-                    : btn.style === "cancel"
-                    ? ["rgba(255,255,255,0.08)", "rgba(255,255,255,0.08)"]
-                    : (companionGradient as [string, string])
-                }
-                style={alertStyles.btnInner}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Text
-                  style={[
-                    alertStyles.btnText,
-                    btn.style === "cancel" && { color: "rgba(255,255,255,0.55)" },
-                  ]}
-                >
-                  {btn.text}
-                </Text>
-              </LinearGradient>
-            </Pressable>
-          ))}
-        </View>
-      </Animated.View>
-    </Animated.View>
-  );
-}
-
-const alertStyles = StyleSheet.create({
-  overlay: {
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.6)",
-    zIndex: 200,
-  },
-  card: {
-    backgroundColor: "#1A1130",
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-    paddingHorizontal: 28,
-    paddingTop: 28,
-    paddingBottom: 20,
-    width: 300,
-    alignItems: "center",
-    gap: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.4,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 16,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: "700" as const,
-    fontFamily: "Inter_700Bold",
-    color: "#ffffff",
-    textAlign: "center",
-  },
-  message: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: "rgba(255,255,255,0.6)",
-    textAlign: "center",
-    lineHeight: 20,
-    marginBottom: 4,
-  },
-  buttons: {
-    width: "100%",
-    gap: 8,
-    marginTop: 8,
-  },
-  btn: {
-    borderRadius: 14,
-    overflow: "hidden",
-    width: "100%",
-  },
-  btnInner: {
-    paddingVertical: 13,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  btnText: {
-    fontSize: 15,
-    fontWeight: "600" as const,
-    fontFamily: "Inter_600SemiBold",
-    color: "#ffffff",
-  },
-});
 
 const AVATAR_SIZE = 140;
 const INNER_RING = AVATAR_SIZE + 28;
