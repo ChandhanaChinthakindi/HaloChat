@@ -239,6 +239,7 @@ export default function CallScreen() {
 
     return new Promise((resolve) => {
       const load = async () => {
+        if (!isAliveRef.current) { resolve(); return; }
         try {
           if (Platform.OS !== "web") {
             const speakerOn = isSpeakerOnRef.current;
@@ -261,6 +262,11 @@ export default function CallScreen() {
 
           console.log("[TTS] Loading sound...");
           const { sound } = await Audio.Sound.createAsync(source, { shouldPlay: false });
+          if (!isAliveRef.current) {
+            await sound.unloadAsync().catch(() => {});
+            resolve();
+            return;
+          }
           soundRef.current = sound;
           onStart?.();
 
@@ -664,6 +670,7 @@ export default function CallScreen() {
         });
         const data = await res.json() as { content: string };
         const greeting = data.content || `Hey! So great to hear from you!`;
+        if (!isAliveRef.current) return;
         addToTranscript({ role: "assistant", content: greeting });
         setPhase("speaking");
         phaseRef.current = "speaking";
