@@ -1,4 +1,3 @@
-import { Buffer } from "buffer";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system";
@@ -266,9 +265,10 @@ export default function CallScreen() {
             const audioResp = await authFetchRef.current(url);
             if (audioResp.status === 429) throw new Error("DAILY_LIMIT_REACHED");
             if (!audioResp.ok) throw new Error(`TTS_HTTP_${audioResp.status}`);
-            const base64 = Buffer.from(
-              new Uint8Array(await audioResp.arrayBuffer())
-            ).toString("base64");
+            const bytes = new Uint8Array(await audioResp.arrayBuffer());
+            let binary = "";
+            for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+            const base64 = btoa(binary);
             await FileSystem.writeAsStringAsync(localUri, base64, {
               encoding: FileSystem.EncodingType.Base64,
             });
