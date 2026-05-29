@@ -1,3 +1,4 @@
+import { Buffer } from "buffer";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system";
@@ -669,6 +670,7 @@ export default function CallScreen() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            companionId: companion.id,
             companionType: companion.type,
             companionGender: companion.gender,
             userAge,
@@ -686,8 +688,8 @@ export default function CallScreen() {
         setPhase("speaking");
         phaseRef.current = "speaking";
         await playTTS(greeting);
-      } catch {
-        // skip greeting if API unavailable
+      } catch (err) {
+        console.warn("[Call] Greeting failed:", err);
       }
 
       setPhase("idle");
