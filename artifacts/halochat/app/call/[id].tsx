@@ -244,11 +244,6 @@ export default function CallScreen() {
         let tempPath: string | null = null;
         try {
           if (Platform.OS !== "web") {
-            // Speaker ON → allowsRecordingIOS: false + staysActiveInBackground: true
-            //   → iOS AVAudioSessionCategoryPlayback → loudspeaker, ignores silent switch
-            // Speaker OFF → allowsRecordingIOS: true → PlayAndRecord → earpiece
-            // staysActiveInBackground: true is required for Playback category;
-            // without it expo-av falls back to Ambient which is silenced by the ringer switch.
             const speakerOn = isSpeakerOnRef.current;
             await Audio.setAudioModeAsync({
               allowsRecordingIOS: !speakerOn,
@@ -257,32 +252,39 @@ export default function CallScreen() {
               shouldDuckAndroid: true,
               playThroughEarpieceAndroid: !speakerOn,
             });
-          }
 
-          // Use authFetch so expired access tokens are auto-refreshed (token TTL is 15 min).
-          // FileSystem.downloadAsync can't retry on 401, authFetch can.
-          if (Platform.OS !== "web") {
-            const audioResp = await authFetchRef.current(url);
-            if (audioResp.status === 429) throw new Error("DAILY_LIMIT_REACHED");
-            if (!audioResp.ok) throw new Error(`TTS_HTTP_${audioResp.status}`);
-            const bytes = new Uint8Array(await audioResp.arrayBuffer());
-            let binary = "";
-            for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-            const base64 = btoa(binary);
-            await FileSystem.writeAsStringAsync(localUri, base64, {
-              encoding: FileSystem.EncodingType.Base64,
+            // FileSystem.downloadAsync with auth header — avoids manual btoa conversion
+            // which is O(n²) and can silently fail on large audio files.
+            let result = await FileSystem.downloadAsync(url, localUri, {
+              headers: accessTokenRef.current ? { Authorization: `Bearer ${accessTokenRef.current}` } : {},
             });
+            console.log("[TTS] Download status:", result.status);
+
+            // Token expired — refresh once and retry
+            if (result.status === 401) {
+              await authFetchRef.current(`${API_BASE}/auth/me`).catch(() => {});
+              result = await FileSystem.downloadAsync(url, localUri, {
+                headers: accessTokenRef.current ? { Authorization: `Bearer ${accessTokenRef.current}` } : {},
+              });
+            }
+
+            if (result.status === 429) throw new Error("DAILY_LIMIT_REACHED");
+            if (result.status >= 400) throw new Error(`TTS_HTTP_${result.status}`);
             tempPath = localUri;
           }
 
           const audioUri = tempPath ?? url;
-          const { sound } = await Audio.Sound.createAsync({ uri: audioUri }, { shouldPlay: true });
+          console.log("[TTS] Loading sound from:", audioUri);
+
+          // Create without shouldPlay to avoid race: handler must be registered before playback starts
+          const { sound } = await Audio.Sound.createAsync({ uri: audioUri }, { shouldPlay: false });
           soundRef.current = sound;
           onStart?.();
+
           sound.setOnPlaybackStatusUpdate((status) => {
             if (!status.isLoaded) {
-              // Error state — unblock the promise so the call loop isn't stuck forever
               if ((status as any).error) {
+                console.warn("[TTS] Sound load error:", (status as any).error);
                 soundRef.current = null;
                 if (tempPath) FileSystem.deleteAsync(tempPath, { idempotent: true }).catch(() => {});
                 resolve();
@@ -295,7 +297,11 @@ export default function CallScreen() {
               if (tempPath) FileSystem.deleteAsync(tempPath, { idempotent: true }).catch(() => {});
             }
           });
+
+          await sound.playAsync();
+          console.log("[TTS] Playback started");
         } catch (err: any) {
+          console.warn("[TTS] Error:", err?.message ?? err);
           if (err?.message === "DAILY_LIMIT_REACHED" || err?.message === "RATE_LIMITED") {
             const msg = err.message === "DAILY_LIMIT_REACHED"
               ? "You've used today's credits for this companion. Come back tomorrow!"
@@ -306,9 +312,6 @@ export default function CallScreen() {
               "Voice unavailable",
               `Could not load audio (${err.message}). Check your connection and that the server is running.`
             );
-          } else {
-            // Unknown error — log it so it's not silently swallowed
-            console.warn("[TTS] Unexpected error:", err?.message ?? err);
           }
           onStart?.();
           if (tempPath) FileSystem.deleteAsync(tempPath, { idempotent: true }).catch(() => {});
