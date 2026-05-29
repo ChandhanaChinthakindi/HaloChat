@@ -67,6 +67,15 @@ vi.mock("drizzle-orm", () => ({
 
 vi.mock("jsonwebtoken", () => ({ default: jwtMock }));
 
+vi.mock("../middleware/rateLimits.js", () => {
+  const pt = (_req: any, _res: any, next: any) => next();
+  return {
+    authLimiter: pt, refreshLimiter: pt,
+    chatLimiter: pt, ttsLimiter: pt,
+    transcribeLimiter: pt, backgroundLimiter: pt,
+  };
+});
+
 // OpenAI mock — streaming variant returns async iterable; sync returns object.
 vi.mock("openai", () => ({
   default: class OpenAI {

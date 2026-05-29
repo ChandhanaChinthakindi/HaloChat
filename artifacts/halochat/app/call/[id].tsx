@@ -46,6 +46,40 @@ const PHASE_LABELS: Record<CallPhase, string> = {
   speaking: "Speaking...",
 };
 
+// Whisper hallucination detection — known phrases Whisper produces on silence/noise
+const WHISPER_HALLUCINATION_PHRASES = [
+  "thank you for watching",
+  "thanks for watching",
+  "please subscribe",
+  "don't forget to subscribe",
+  "subtitles by",
+  "like and subscribe",
+  "[music]",
+  "[applause]",
+  "[laughter]",
+  "[silence]",
+  "www.",
+  ".com",
+];
+// CJK Unicode block — Whisper hallucinates Chinese/Japanese/Korean on silence
+const CJK_REGEX = /[　-鿿가-힯]/;
+
+function isSilenceOrHallucination(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (!t || t.length < 3) return true;
+  if (CJK_REGEX.test(t)) return true;
+  return WHISPER_HALLUCINATION_PHRASES.some((p) => t.includes(p));
+}
+
+const SILENCE_RESPONSES = [
+  "I didn't catch that — say something?",
+  "Hello? Did you say something?",
+  "I'm here, go ahead — I'm listening.",
+  "You there? I didn't hear anything.",
+  "I missed that. Can you say it again?",
+  "Hmm, I didn't hear you. Go ahead!",
+];
+
 // Silence detection
 const SILENCE_THRESHOLD_DB = -40;   // dBFS — above this = speech detected
 const SILENCE_DURATION_MS = 1800;   // ms of silence after speech → stop
@@ -53,7 +87,32 @@ const NO_SPEECH_TIMEOUT_MS = 5000;  // ms total before giving up if no speech de
 const MIN_RECORDING_MS = 800;       // minimum recording before silence check kicks in
 const MAX_RECORDING_MS = 30000;     // hard cutoff regardless of speech
 const POLL_INTERVAL_MS = 100;       // how often we poll audio levels
+const SILENCE_POPUP_THRESHOLD = 4;  // consecutive silences before "Are you still there?" popup
 
+// AAC preset: metering works on iOS (LPCM doesn't report levels), produces .m4a on both platforms
+const RECORDING_PRESET: Audio.RecordingOptions = {
+  isMeteringEnabled: true,
+  android: {
+    extension: ".m4a",
+    outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+    audioEncoder: Audio.AndroidAudioEncoder.AAC,
+    sampleRate: 44100,
+    numberOfChannels: 1,
+    bitRate: 128000,
+  },
+  ios: {
+    extension: ".m4a",
+    outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
+    audioQuality: Audio.IOSAudioQuality.HIGH,
+    sampleRate: 44100,
+    numberOfChannels: 1,
+    bitRate: 128000,
+    linearPCMBitDepth: 16,
+    linearPCMIsBigEndian: false,
+    linearPCMIsFloat: false,
+  },
+  web: { mimeType: "audio/webm", bitsPerSecond: 128000 },
+};
 
 interface CallMessage {
   role: "user" | "assistant";
@@ -82,6 +141,7 @@ export default function CallScreen() {
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [silenceCountdown, setSilenceCountdown] = useState(0);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
 
   const recordingRef = useRef<Audio.Recording | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
@@ -96,7 +156,10 @@ export default function CallScreen() {
   const hasSpeechRef = useRef(false);   // true once any audio above threshold is detected
   const isStoppingRef = useRef(false);
   const isMutedRef = useRef(false);
+  const isSpeakerOnRef = useRef(true);
   const phaseRef = useRef<CallPhase>("connecting");
+  const consecutiveSilencesRef = useRef(0);
+  const isAliveRef = useRef(true); // false after endCall — prevents state updates on unmounted component
 
   // Forward ref so the polling interval always calls the latest processRecording
   const processRecordingRef = useRef<(() => Promise<void>) | null>(null);
@@ -105,6 +168,7 @@ export default function CallScreen() {
   const accessTokenRef = useRef(accessToken);
 
   useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
+  useEffect(() => { isSpeakerOnRef.current = isSpeakerOn; }, [isSpeakerOn]);
   useEffect(() => { authFetchRef.current = authFetch; }, [authFetch]);
   useEffect(() => { accessTokenRef.current = accessToken; }, [accessToken]);
 
@@ -180,24 +244,34 @@ export default function CallScreen() {
         let tempPath: string | null = null;
         try {
           if (Platform.OS !== "web") {
+            // Speaker ON → allowsRecordingIOS: false + staysActiveInBackground: true
+            //   → iOS AVAudioSessionCategoryPlayback → loudspeaker, ignores silent switch
+            // Speaker OFF → allowsRecordingIOS: true → PlayAndRecord → earpiece
+            // staysActiveInBackground: true is required for Playback category;
+            // without it expo-av falls back to Ambient which is silenced by the ringer switch.
+            const speakerOn = isSpeakerOnRef.current;
             await Audio.setAudioModeAsync({
-              allowsRecordingIOS: false,
+              allowsRecordingIOS: !speakerOn,
               playsInSilentModeIOS: true,
-              staysActiveInBackground: false,
+              staysActiveInBackground: true,
               shouldDuckAndroid: true,
-              playThroughEarpieceAndroid: false,
+              playThroughEarpieceAndroid: !speakerOn,
             });
           }
 
-          // Download to local file — avoids iOS HLS streaming errors
+          // Use authFetch so expired access tokens are auto-refreshed (token TTL is 15 min).
+          // FileSystem.downloadAsync can't retry on 401, authFetch can.
           if (Platform.OS !== "web") {
-            const dlHeaders = accessTokenRef.current
-              ? { Authorization: `Bearer ${accessTokenRef.current}` }
-              : undefined;
-            const dl = await FileSystem.downloadAsync(url, localUri, { headers: dlHeaders });
-            if (dl.status === 429) throw new Error("DAILY_LIMIT_REACHED");
-            if (dl.status !== 200) throw new Error(`TTS_HTTP_${dl.status}`);
-            tempPath = dl.uri;
+            const audioResp = await authFetchRef.current(url);
+            if (audioResp.status === 429) throw new Error("DAILY_LIMIT_REACHED");
+            if (!audioResp.ok) throw new Error(`TTS_HTTP_${audioResp.status}`);
+            const base64 = Buffer.from(
+              new Uint8Array(await audioResp.arrayBuffer())
+            ).toString("base64");
+            await FileSystem.writeAsStringAsync(localUri, base64, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            tempPath = localUri;
           }
 
           const audioUri = tempPath ?? url;
@@ -205,11 +279,18 @@ export default function CallScreen() {
           soundRef.current = sound;
           onStart?.();
           sound.setOnPlaybackStatusUpdate((status) => {
-            if (!status.isLoaded) return;
+            if (!status.isLoaded) {
+              // Error state — unblock the promise so the call loop isn't stuck forever
+              if ((status as any).error) {
+                soundRef.current = null;
+                if (tempPath) FileSystem.deleteAsync(tempPath, { idempotent: true }).catch(() => {});
+                resolve();
+              }
+              return;
+            }
             if (status.didJustFinish) {
               soundRef.current = null;
               resolve();
-              // Clean up temp file after playback
               if (tempPath) FileSystem.deleteAsync(tempPath, { idempotent: true }).catch(() => {});
             }
           });
@@ -220,7 +301,13 @@ export default function CallScreen() {
               : "Too many requests. Wait a moment and try again.";
             Alert.alert("Limit reached", msg, [{ text: "OK", onPress: () => endCallRef.current?.() }]);
           } else if (err?.message?.startsWith("TTS_HTTP_") || err?.message === "Network request failed") {
-            Alert.alert("Voice unavailable", "Could not reach the server. Check your connection and try again.");
+            Alert.alert(
+              "Voice unavailable",
+              `Could not load audio (${err.message}). Check your connection and that the server is running.`
+            );
+          } else {
+            // Unknown error — log it so it's not silently swallowed
+            console.warn("[TTS] Unexpected error:", err?.message ?? err);
           }
           onStart?.();
           if (tempPath) FileSystem.deleteAsync(tempPath, { idempotent: true }).catch(() => {});
@@ -246,12 +333,10 @@ export default function CallScreen() {
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
+        staysActiveInBackground: true,
       });
 
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
+      const { recording } = await Audio.Recording.createAsync(RECORDING_PRESET);
 
       recordingRef.current = recording;
       const now = Date.now();
@@ -325,6 +410,62 @@ export default function CallScreen() {
     }
   }, [clearSilenceTimer]); // clearSilenceTimer is stable
 
+  const toggleSpeaker = useCallback(async () => {
+    const next = !isSpeakerOnRef.current;
+    isSpeakerOnRef.current = next;
+    setIsSpeakerOn(next);
+    if (Platform.OS !== "web") {
+      await Audio.setAudioModeAsync({
+        // During recording always keep allowsRecordingIOS: true
+        allowsRecordingIOS: phaseRef.current === "recording" ? true : !next,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: !next,
+      });
+    }
+    hapticsImpact(ImpactFeedbackStyle.Light);
+  }, []);
+
+  const handleSilence = useCallback(async () => {
+    consecutiveSilencesRef.current += 1;
+
+    if (consecutiveSilencesRef.current >= SILENCE_POPUP_THRESHOLD) {
+      // Too many consecutive silences — pause the call and ask if user is still there
+      consecutiveSilencesRef.current = 0;
+      setPhase("idle");
+      phaseRef.current = "idle";
+      Alert.alert(
+        "Are you still there?",
+        "I haven't heard anything for a while.",
+        [
+          {
+            text: "Continue",
+            onPress: () => {
+              startListening();
+            },
+          },
+          {
+            text: "End Call",
+            style: "destructive",
+            onPress: () => endCallRef.current?.(),
+          },
+        ],
+        { cancelable: false }
+      );
+    } else {
+      const response = SILENCE_RESPONSES[Math.floor(Math.random() * SILENCE_RESPONSES.length)];
+      setPhase("speaking");
+      phaseRef.current = "speaking";
+      await playTTS(response, () => addToTranscript({ role: "assistant", content: response }));
+      if (!isAliveRef.current) return;
+      setPhase("idle");
+      phaseRef.current = "idle";
+      await new Promise<void>((r) => setTimeout(r, 250));
+      startListening();
+    }
+  }, [playTTS, addToTranscript, startListening]);
+
   const runAITurn = useCallback(async (userText: string) => {
     if (!companion) return;
 
@@ -353,7 +494,7 @@ export default function CallScreen() {
         const msg = body.error === "DAILY_LIMIT_REACHED"
           ? "You've used today's credits for this companion. Come back tomorrow!"
           : "Too many requests. Wait a moment and try again.";
-        Alert.alert("Limit reached", msg, [{ text: "OK", onPress: endCall }]);
+        Alert.alert("Limit reached", msg, [{ text: "OK", onPress: () => endCallRef.current?.() }]);
         return;
       }
       const data = await res.json() as { content: string };
@@ -367,9 +508,9 @@ export default function CallScreen() {
     } catch {
       // silently fail — will resume listening below
     } finally {
+      if (!isAliveRef.current) return;
       setPhase("idle");
       phaseRef.current = "idle";
-      // Brief pause so the iOS audio session fully releases from playback
       await new Promise<void>((r) => setTimeout(r, 250));
       startListening();
     }
@@ -396,60 +537,86 @@ export default function CallScreen() {
       const uri = recordingRef.current.getURI();
       recordingRef.current = null;
 
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: !isSpeakerOnRef.current,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: !isSpeakerOnRef.current,
+      });
 
       if (!uri) throw new Error("No recording URI");
 
-      // Use XHR for file upload — Expo's global fetch rejects the RN { uri, type, name } FormData pattern
-      const data = await new Promise<{ transcript?: string }>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("POST", `${API_BASE}/companion/transcribe`);
-        if (accessTokenRef.current) {
-          xhr.setRequestHeader("Authorization", `Bearer ${accessTokenRef.current}`);
+      // Use XHR for file upload — Expo's global fetch rejects the RN { uri, type, name } FormData pattern.
+      // On 401 (token expired) we refresh via authFetch and retry once.
+      const sendXHR = (token: string | null) =>
+        new Promise<{ transcript?: string }>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("POST", `${API_BASE}/companion/transcribe`);
+          if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              try { resolve(JSON.parse(xhr.responseText)); } catch { resolve({}); }
+            } else if (xhr.status === 401) {
+              reject(new Error("TOKEN_EXPIRED"));
+            } else if (xhr.status === 429) {
+              try {
+                const body = JSON.parse(xhr.responseText);
+                reject(new Error(body.error === "DAILY_LIMIT_REACHED" ? "DAILY_LIMIT_REACHED" : "RATE_LIMITED"));
+              } catch { reject(new Error("RATE_LIMITED")); }
+            } else {
+              reject(new Error(`HTTP ${xhr.status}`));
+            }
+          };
+          xhr.onerror = () => reject(new Error("Network error"));
+          xhr.timeout = 30000;
+          xhr.ontimeout = () => reject(new Error("Transcription timed out"));
+          const form = new FormData();
+          const mimeType = uri.endsWith(".wav") ? "audio/wav" : "audio/m4a";
+          const fileName = uri.endsWith(".wav") ? "voice.wav" : "voice.m4a";
+          form.append("audio", { uri, type: mimeType, name: fileName } as any);
+          if (companion?.id) form.append("companionId", companion.id);
+          xhr.send(form);
+        });
+
+      let data: { transcript?: string } = {};
+      try {
+        data = await sendXHR(accessTokenRef.current);
+      } catch (xhrErr: any) {
+        if (xhrErr?.message === "TOKEN_EXPIRED") {
+          // Token expired — trigger authFetch which handles the /auth/refresh call internally
+          await authFetchRef.current(`${API_BASE}/auth/me`).catch(() => {});
+          // accessTokenRef is updated synchronously by tryRefresh in authFetch
+          data = await sendXHR(accessTokenRef.current);
+        } else {
+          throw xhrErr;
         }
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try { resolve(JSON.parse(xhr.responseText)); } catch { resolve({}); }
-          } else if (xhr.status === 429) {
-            try {
-              const body = JSON.parse(xhr.responseText);
-              reject(new Error(body.error === "DAILY_LIMIT_REACHED" ? "DAILY_LIMIT_REACHED" : "RATE_LIMITED"));
-            } catch { reject(new Error("RATE_LIMITED")); }
-          } else {
-            reject(new Error(`HTTP ${xhr.status}`));
-          }
-        };
-        xhr.onerror = () => reject(new Error("Network error"));
-        const form = new FormData();
-        form.append("audio", { uri, type: "audio/m4a", name: "voice.m4a" } as any);
-        if (companion?.id) form.append("companionId", companion.id);
-        xhr.send(form);
-      });
+      }
       const transcript = data.transcript?.trim();
 
-      if (transcript) {
+      if (transcript && !isSilenceOrHallucination(transcript)) {
+        consecutiveSilencesRef.current = 0;
         addToTranscript({ role: "user", content: transcript });
         await runAITurn(transcript);
       } else {
-        addToTranscript({ role: "user", content: "(no speech detected)" });
-        setPhase("idle");
-        phaseRef.current = "idle";
-        startListening();
+        // No speech or Whisper hallucination — companion prompts user naturally
+        await handleSilence();
       }
     } catch (err: any) {
       if (err?.message === "DAILY_LIMIT_REACHED" || err?.message === "RATE_LIMITED") {
         const msg = err.message === "DAILY_LIMIT_REACHED"
           ? "You've used today's credits for this companion. Come back tomorrow!"
           : "Too many requests. Wait a moment and try again.";
-        Alert.alert("Limit reached", msg, [{ text: "OK", onPress: endCall }]);
+        Alert.alert("Limit reached", msg, [{ text: "OK", onPress: () => endCallRef.current?.() }]);
         return;
       }
+      if (!isAliveRef.current) return;
       addToTranscript({ role: "user", content: `(transcription error: ${err?.message ?? "unknown"})` });
       setPhase("idle");
       phaseRef.current = "idle";
       startListening();
     }
-  }, [clearSilenceTimer, runAITurn, startListening, addToTranscript]);
+  }, [clearSilenceTimer, runAITurn, handleSilence, startListening, addToTranscript]);
 
   // Keep processRecordingRef pointing at the latest closure
   useEffect(() => {
@@ -465,6 +632,7 @@ export default function CallScreen() {
     if (isMuted && phaseRef.current === "recording") {
       isStoppingRef.current = true;
       clearSilenceTimer();
+      consecutiveSilencesRef.current = 0;
       recordingRef.current?.stopAndUnloadAsync().catch(() => {});
       recordingRef.current = null;
       setPhase("idle");
@@ -533,6 +701,7 @@ export default function CallScreen() {
     init();
 
     return () => {
+      isAliveRef.current = false;
       if (timerRef.current) clearInterval(timerRef.current);
       clearSilenceTimer();
       stopSound();
@@ -590,6 +759,17 @@ export default function CallScreen() {
         const callBonus = aiTurns >= 4 ? 6 : 3;
         await updateRelationshipLevel(companion.id, callBonus);
       }
+    }
+
+    // Release the active audio session so other apps (Music, etc.) resume normally
+    if (Platform.OS !== "web") {
+      Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: false,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: false,
+      }).catch(() => {});
     }
 
     await hapticsNotification(NotificationFeedbackType.Warning);
@@ -810,6 +990,25 @@ export default function CallScreen() {
           />
         </Pressable>
 
+        {/* Speaker toggle */}
+        <Pressable
+          onPress={toggleSpeaker}
+          style={[
+            styles.sideBtn,
+            {
+              backgroundColor: isSpeakerOn
+                ? "rgba(255,255,255,0.2)"
+                : "rgba(255,255,255,0.08)",
+            },
+          ]}
+        >
+          <Ionicons
+            name={isSpeakerOn ? "volume-high" : "volume-off"}
+            size={22}
+            color={isSpeakerOn ? "#ffffff" : "rgba(255,255,255,0.6)"}
+          />
+        </Pressable>
+
         {/* Main button: send-early when recording, visual indicator otherwise */}
         <Animated.View style={micBtnStyle}>
           <Pressable
@@ -1024,7 +1223,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 28,
+    gap: 18,
     paddingTop: 16,
   },
   sideBtn: {

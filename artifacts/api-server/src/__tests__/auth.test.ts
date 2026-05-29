@@ -72,6 +72,17 @@ vi.mock("../lib/email.js", () => ({
   sendPasswordResetEmail: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Bypass all rate limiters so the large number of auth test requests doesn't
+// exhaust the shared in-memory counter and cause spurious 429s.
+vi.mock("../middleware/rateLimits.js", () => {
+  const pt = (_req: any, _res: any, next: any) => next();
+  return {
+    authLimiter: pt, refreshLimiter: pt,
+    chatLimiter: pt, ttsLimiter: pt,
+    transcribeLimiter: pt, backgroundLimiter: pt,
+  };
+});
+
 // ---------------------------------------------------------------------------
 // Import app after all mocks are registered
 // ---------------------------------------------------------------------------

@@ -11,6 +11,7 @@ export default defineConfig({
       LOG_LEVEL: "silent",
       NODE_ENV: "test",
       OPENAI_API_KEY: "test-openai-key",
+      DATABASE_URL: "postgresql://test:test@localhost:5432/halochat_test",
       DAILY_COMPANION_LIMIT: "200",
     },
     coverage: {

@@ -371,8 +371,10 @@ router.post(
     }
 
     try {
-      const ext = file.mimetype.includes("mp4")
-        ? "mp4"
+      const ext = file.mimetype.includes("mp4") || file.mimetype.includes("m4a")
+        ? "m4a"
+        : file.mimetype.includes("wav")
+        ? "wav"
         : file.mimetype.includes("webm")
         ? "webm"
         : file.mimetype.includes("mp3")
@@ -387,6 +389,7 @@ router.post(
         file: audioFile,
         model: "whisper-1",
         response_format: "json",
+        language: "en",
       });
 
       res.json({ transcript: transcription.text });
