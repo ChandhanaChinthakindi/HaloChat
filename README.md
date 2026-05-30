@@ -16,6 +16,7 @@ HaloChat is a mobile app that lets you build meaningful relationships with perso
 - **ESLint clean** — All 43 lint problems resolved (13 unescaped-entity errors, 30 warnings including unused imports/vars, exhaustive-deps suppressions for Reanimated shared values, and import order fixes)
 - **Project documentation** — Added detailed App Description section to PROJECT_DOCUMENTATION.md covering user flows, companion types, and system architecture
 - **Legal documents** — Added `docs/PRIVACY_POLICY.md` and `docs/TERMS_AND_CONDITIONS.md` for App Store publishing
+- **Language style mirroring** — Companions now detect and mirror Romanized Telugu (Tenglish), Hinglish, or any transliterated Indian language blend the user writes in; pure English input still gets pure English replies
 
 ### Previous (v1.0)
 

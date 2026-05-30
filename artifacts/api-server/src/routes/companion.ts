@@ -162,6 +162,8 @@ router.post("/companion/chat", requireAuth, dailyLimit, chatLimiter, async (req,
   }
   systemPrompt += `\n\nRESPONSE LENGTH: ${lengthInstruction}`;
 
+  systemPrompt += `\n\nLANGUAGE STYLE MIRRORING: Pay close attention to how the user writes. If they mix English with a transliterated Indian language — for example Romanized Telugu (Tenglish: "ela unnav", "cheppandi", "baaga undi"), Romanized Hindi (Hinglish: "kya chal raha hai", "yaar", "bilkul"), or any similar blend — naturally mirror that same style in your reply. Weave their words in organically, the way a friend would. Do not overdo it or use words they haven't used yet. If they write in pure English, reply in pure English. Shift fluidly as their style shifts.`;
+
   const chatMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
     ...messages,
@@ -357,6 +359,7 @@ router.post("/companion/chat-sync", requireAuth, dailyLimit, chatLimiter, async 
     systemPrompt += `\n\nFIRST MEETING — You are just meeting this person for the very first time. You do NOT know their name yet — ask for it naturally as part of getting to know them. Be genuinely curious, introduce yourself, ask one question at a time. Stay in character.`;
   }
   systemPrompt += CONTENT_RESTRICTIONS;
+  systemPrompt += `\n\nLANGUAGE STYLE MIRRORING: If the user speaks using a mix of English and a transliterated Indian language (Tenglish, Hinglish, etc.), naturally mirror that blend in your spoken reply — like a friend would. Don't force unfamiliar words; just echo their style. Pure English input → pure English reply.`;
   systemPrompt += `\n\nYou are in a VOICE CALL. Speak naturally out loud — 1 to 3 sentences max. Sound like a real person talking, not reading. No markdown, no lists. React to what they actually said.`;
 
   try {
