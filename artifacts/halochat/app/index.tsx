@@ -79,6 +79,7 @@ function LoadingScreen() {
     dotAnim(dot3, 400);
 
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const iconStyle = useAnimatedStyle(() => ({ opacity: iconFade.value }));

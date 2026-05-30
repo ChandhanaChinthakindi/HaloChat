@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -11,10 +11,10 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
-const WAITING_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4 hours
-
 import { COMPANION_TYPES, type Companion } from "@/context/CompanionContext";
 import { useColors } from "@/hooks/useColors";
+
+const WAITING_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 interface Props {
   companion: Companion;
@@ -189,6 +189,7 @@ function WaitingDot() {
       -1,
       false
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const dotStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));

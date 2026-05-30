@@ -50,6 +50,7 @@ export function ChatBubble({
       translateY.value = withSpring(0, { damping: 22, stiffness: 280 });
       opacity.value = withTiming(1, { duration: 160 });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const animStyle = useAnimatedStyle(() => ({

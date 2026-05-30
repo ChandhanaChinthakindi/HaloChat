@@ -77,10 +77,10 @@ export default function ForgotPasswordScreen() {
               </LinearGradient>
               <Text style={[styles.title, { color: colors.foreground }]}>Check your inbox</Text>
               <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-                If <Text style={{ color: colors.foreground }}>{identifier.trim()}</Text> is linked to an account, you'll receive a reset link within a minute.
+                If <Text style={{ color: colors.foreground }}>{identifier.trim()}</Text>{" is linked to an account, you'll receive a reset link within a minute."}
               </Text>
               <Text style={[styles.hint, { color: colors.mutedForeground }]}>
-                Check your spam folder if you don't see it.
+                {"Check your spam folder if you don't see it."}
               </Text>
               <Pressable
                 onPress={() => router.replace("/auth/login")}
@@ -110,7 +110,7 @@ export default function ForgotPasswordScreen() {
                 </LinearGradient>
                 <Text style={[styles.title, { color: colors.foreground }]}>Forgot password?</Text>
                 <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-                  Enter your email or username and we'll send you a link to reset your password.
+                  {"Enter your email or username and we'll send you a link to reset your password."}
                 </Text>
               </View>
 

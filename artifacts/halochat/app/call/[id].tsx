@@ -26,7 +26,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/context/AuthContext";
 import { API_BASE, COMPANION_TYPES, useCompanions } from "@/context/CompanionContext";
-import { useColors } from "@/hooks/useColors";
 
 type CallPhase =
   | "connecting"
@@ -119,7 +118,6 @@ interface CallMessage {
 }
 
 export default function CallScreen() {
-  const colors = useColors();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { companions, addMemoryNote, updateRelationshipLevel } = useCompanions();
@@ -138,7 +136,7 @@ export default function CallScreen() {
   const [phase, setPhase] = useState<CallPhase>("connecting");
   const [callMessages, setCallMessages] = useState<CallMessage[]>([]);
   const [duration, setDuration] = useState(0);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted] = useState(false);
   const [silenceCountdown, setSilenceCountdown] = useState(0);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
 
@@ -226,6 +224,7 @@ export default function CallScreen() {
     } else {
       connectingPulse.value = withTiming(1, { duration: 200 });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
   const clearSilenceTimer = useCallback(() => {
@@ -410,7 +409,8 @@ export default function CallScreen() {
         if (!recordingRef.current && !isMutedRef.current) startListening();
       }, 700);
     }
-  }, [clearSilenceTimer]); // clearSilenceTimer is stable
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clearSilenceTimer]);
 
   const toggleSpeaker = useCallback(async () => {
     const next = !isSpeakerOnRef.current;
@@ -516,6 +516,7 @@ export default function CallScreen() {
       await new Promise<void>((r) => setTimeout(r, 250));
       startListening();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companion, addToTranscript, playTTS, startListening]);
 
   // Stops the active recording and sends it through transcription → AI
@@ -618,6 +619,7 @@ export default function CallScreen() {
       phaseRef.current = "idle";
       startListening();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clearSilenceTimer, runAITurn, handleSilence, startListening, addToTranscript]);
 
   // Keep processRecordingRef pointing at the latest closure
@@ -707,6 +709,7 @@ export default function CallScreen() {
       stopSound();
       recordingRef.current?.stopAndUnloadAsync().catch(() => {});
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Tap mic = stop and send immediately (don't wait for silence timeout)

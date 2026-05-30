@@ -11,7 +11,6 @@ import {
   FlatList,
   Platform,
   Pressable,
-  ScrollView,
   Share,
   StyleSheet,
   Text,
@@ -128,6 +127,7 @@ export default function ChatScreen() {
     } else {
       recordPulse.value = withTiming(1);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRecording]);
 
   // Keep refs current so the unmount cleanup can read latest values
@@ -217,6 +217,7 @@ export default function ChatScreen() {
         setTimeout(() => triggerCompanionCheckin(msgs), 1000);
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const baseMessages = [...messages];
@@ -357,6 +358,7 @@ export default function ChatScreen() {
         );
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companion, user?.gender, addMessage]);
 
   const triggerCompanionCheckin = useCallback(
@@ -478,6 +480,7 @@ export default function ChatScreen() {
         }
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [companion, addMessage]
   );
 
@@ -655,6 +658,7 @@ export default function ChatScreen() {
         }
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [isStreaming, companion, messages, addMessage, updateRelationshipLevel, extractMemories]
   );
 
@@ -808,12 +812,6 @@ export default function ChatScreen() {
     .map((w) => w[0])
     .join("")
     .toUpperCase();
-
-  const relLabel =
-    companion.relationshipLevel < 20 ? "New" :
-    companion.relationshipLevel < 40 ? "Acquaintance" :
-    companion.relationshipLevel < 60 ? "Friend" :
-    companion.relationshipLevel < 80 ? "Close" : "Bonded";
 
   return (
     <KeyboardAvoidingView
@@ -1049,7 +1047,7 @@ export default function ChatScreen() {
       {retryContent !== null && (
         <View style={[styles.retryBanner, { backgroundColor: `${colors.destructive}10`, borderColor: `${colors.destructive}25` }]}>
           <Ionicons name="alert-circle-outline" size={15} color={colors.destructive} />
-          <Text style={[styles.retryLabel, { color: colors.mutedForeground }]}>Couldn't reach the server</Text>
+          <Text style={[styles.retryLabel, { color: colors.mutedForeground }]}>{"Couldn't reach the server"}</Text>
           <Pressable
             onPress={() => {
               const content = retryContent;
@@ -1373,6 +1371,7 @@ function MilestoneCelebration({
     cardScale.value = withSpring(1, { damping: 15, stiffness: 200 });
     const t = setTimeout(onDismiss, 3800);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const overlayStyle = useAnimatedStyle(() => ({ opacity: overlayOpacity.value }));
@@ -1476,6 +1475,7 @@ function TypingBubble({
     d1.value = bounce();
     d2.value = withDelay(130, bounce());
     d3.value = withDelay(260, bounce());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const s1 = useAnimatedStyle(() => ({ transform: [{ translateY: d1.value }] }));

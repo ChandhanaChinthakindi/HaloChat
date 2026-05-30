@@ -271,7 +271,7 @@ function ErrorState({ onRetry, colors }: { onRetry: () => void; colors: any }) {
         <Ionicons name="cloud-offline-outline" size={32} color={colors.mutedForeground} />
       </View>
       <Text style={[styles.noResultsTitle, { color: colors.foreground }]}>
-        Couldn't connect
+        {"Couldn't connect"}
       </Text>
       <Text style={[styles.noResultsSub, { color: colors.mutedForeground }]}>
         Check your connection and try again
@@ -309,7 +309,7 @@ function NoResults({ query, colors }: { query: string; colors: any }) {
         No companions found
       </Text>
       <Text style={[styles.noResultsSub, { color: colors.mutedForeground }]}>
-        Nothing matches "{query}"
+        {`Nothing matches "${query}"`}
       </Text>
     </View>
   );

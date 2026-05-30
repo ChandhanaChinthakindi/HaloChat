@@ -238,7 +238,7 @@ export default function CreateScreen() {
             {/* Sample message bubble */}
             <View style={[styles.sampleBubble, { backgroundColor: `${activeGradient[0]}15`, borderColor: `${activeGradient[0]}30` }]}>
               <Text style={[styles.sampleQuote, { color: colors.foreground }]}>
-                "{COMPANION_SAMPLES[preselected]}"
+                {`"${COMPANION_SAMPLES[preselected]}"`}
               </Text>
             </View>
 
@@ -388,7 +388,7 @@ export default function CreateScreen() {
                     </Text>
                     <View style={[styles.previewBubble, { backgroundColor: `${activeGradient[0]}18` }]}>
                       <Text style={[styles.previewSample, { color: colors.foreground }]}>
-                        "{COMPANION_SAMPLES[selectedType]}"
+                        {`"${COMPANION_SAMPLES[selectedType]}"`}
                       </Text>
                     </View>
                   </View>

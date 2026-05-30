@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import * as Haptics from "expo-haptics";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -41,7 +40,7 @@ export default function ProfileScreen() {
       .then((r) => r.json())
       .then((data) => { if (Array.isArray(data)) setMoodHistory(data); })
       .catch(() => {});
-  }, [id]);
+  }, [id, authFetch]);
 
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
   const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;

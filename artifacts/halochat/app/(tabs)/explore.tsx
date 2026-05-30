@@ -13,7 +13,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { TypeCard } from "@/components/TypeBadge";
-import { COMPANION_TYPES, type CompanionType } from "@/context/CompanionContext";
+import { type CompanionType } from "@/context/CompanionContext";
 import { useColors } from "@/hooks/useColors";
 
 const ALL_TYPES: CompanionType[] = [
@@ -66,7 +66,6 @@ export default function ExploreScreen() {
         showsVerticalScrollIndicator={false}
       >
         {ALL_TYPES.map((type) => {
-          const info = COMPANION_TYPES[type];
           return (
             <View key={type} style={styles.gridItem}>
               <TypeCard type={type} selected={false} onPress={() => handleTypePress(type)} />

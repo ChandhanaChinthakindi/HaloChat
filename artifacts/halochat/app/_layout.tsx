@@ -28,7 +28,7 @@ function PushTokenRegistrar() {
   const { isAuthenticated, authFetch } = useAuth();
   useEffect(() => {
     if (isAuthenticated) registerPushToken(authFetch);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, authFetch]);
   return null;
 }
 
@@ -80,6 +80,7 @@ export default function RootLayout() {
 
     let sub: { remove: () => void } | null = null;
     try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const Notifications = require("expo-notifications");
 
       sub = Notifications.addNotificationResponseReceivedListener(

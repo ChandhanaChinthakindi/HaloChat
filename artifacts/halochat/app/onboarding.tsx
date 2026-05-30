@@ -3,7 +3,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
-  Dimensions,
   Keyboard,
   Platform,
   Pressable,
@@ -22,8 +21,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useCompanions } from "@/context/CompanionContext";
 import { hapticsImpact } from "@/utils/haptics";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 const SLIDES = [
   {

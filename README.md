@@ -13,6 +13,7 @@ HaloChat is a mobile app that lets you build meaningful relationships with perso
 - **Keyboard-aware layouts** — Chat input bar and Create Companion footer animate with the keyboard via `useReanimatedKeyboardAnimation` so the text field and submit button are never hidden behind the keyboard
 - **Animated loading screen** — Full-screen launch screen featuring the app icon, "HaloChat" title, and cycling role tagline ("Friend / Lover / Therapist / Supporter") with smooth fade+slide transitions; pulsing loading dots in brand colour
 - **First-launch 3.5s splash** — New installs hold the loading screen for 3.5 seconds (via `AsyncStorage` flag) so users experience the branding; subsequent launches skip straight to the app
+- **ESLint clean** — All 43 lint problems resolved (13 unescaped-entity errors, 30 warnings including unused imports/vars, exhaustive-deps suppressions for Reanimated shared values, and import order fixes)
 
 ### Previous (v1.0)
 

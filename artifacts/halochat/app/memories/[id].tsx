@@ -121,7 +121,7 @@ export default function MemoriesScreen() {
               No memories yet
             </Text>
             <Text style={[styles.emptyDesc, { color: colors.mutedForeground }]}>
-              Chat with {companion.name} and they'll learn things about you automatically. You can also add memories manually below.
+              {"Chat with "}{companion.name}{" and they'll learn things about you automatically. You can also add memories manually below."}
             </Text>
           </View>
         }
