@@ -8,7 +8,7 @@
 |---|---|
 | **Project Name** | HaloChat — AI Companion App |
 | **Author / Owner** | Chandhana Chinthakindi / Developer & Owner |
-| **Version** | 1.0 (Draft) |
+| **Version** | 1.1 |
 | **Date Created** | May 2026 |
 | **Last Updated** | May 2026 |
 | **Document Type** | Project Documentation |
@@ -69,20 +69,23 @@ HaloChat's long-term vision is to be the most trusted and personal AI relationsh
 
 ## 2. Project Scope & Objectives
 
-### In Scope (v1.0)
+### In Scope (v1.1 — current)
 
 - iOS mobile application (React Native + Expo)
 - 8 distinct AI companion personality types
-- Real-time text chat with streaming responses
-- Full voice call capability (speech-to-text + TTS)
+- Real-time text chat with streaming responses and dynamic reply length
+- Full voice call capability (speech-to-text + TTS) with per-companion voice selection
 - Voice message recording in chat
 - Companion memory system (automatic fact extraction)
 - Relationship progression and milestone system
+- Mood check-in system with 7-day history
+- Companion waiting indicator (pulsing dot after 4h inactivity)
 - Push notification check-ins
 - Email/password, Apple Sign-In, Google OAuth
 - User profile and companion profile management
 - Daily usage limits and rate limiting for cost control
 - Backend API deployed on Railway with PostgreSQL
+- Animated loading/splash screen with branded first-launch experience
 
 ### Out of Scope (v1.0)
 
@@ -248,9 +251,10 @@ Sam went through a breakup and uses HaloChat's **Therapist** companion to proces
 | Table | Purpose |
 |---|---|
 | `users` | Accounts, credentials, OAuth IDs, push tokens |
-| `companions` | AI companion profiles, relationship level, last activity |
+| `companions` | AI companion profiles, relationship level, custom voice, last activity |
 | `messages` | Full conversation history per companion |
 | `memory_notes` | Extracted user facts per companion (max 20) |
+| `mood_logs` | Daily mood check-in values per companion (1–5, one row per day, upsert) |
 | `daily_usage` | Per-user per-companion daily request counter |
 
 ### Non-Functional Requirements
@@ -276,9 +280,13 @@ Sam went through a breakup and uses HaloChat's **Therapist** companion to proces
 |---|---|---|
 | 8 Companion Personalities | Romantic, Flirty, Supportive, Bestfriend, Mentor, Anime, Therapist, Roleplay | Live |
 | Streaming Text Chat | Token-by-token SSE streaming with multi-part reply splitting | Live |
+| Dynamic Response Length | Reply length and token budget scale with user message length | Live |
 | Voice Calls | Full turn-based voice loop with silence detection | Live |
+| Per-Companion Voice | TTS voice selection at creation; gender-filtered options with audio preview | Live |
 | Voice Messages | In-chat audio recording → Whisper transcription | Live |
 | Companion Memory | Auto-extracted + manually added facts injected into all prompts | Live |
+| Mood Tracking | Exit check-in (5-emoji scale) + 7-day sparkline in companion profile | Live |
+| Waiting Indicator | Pulsing dot on companion card after 4h inactivity | Live |
 | Relationship Progression | Bond score 0–100 with 5 tiers changing companion tone | Live |
 | Push Notifications | Personalised check-ins after 4+ hours of inactivity | Live |
 | Streak System | Daily consecutive-use tracking with visual indicator | Live |
@@ -353,6 +361,9 @@ Sam went through a breakup and uses HaloChat's **Therapist** companion to proces
 |---|---|---|---|---|---|
 | Real-time voice calls | ✅ Full | ✅ Paid | ❌ | ❌ | ❌ |
 | Streaming text responses | ✅ | ❌ | ✅ | ❌ | ❌ |
+| Dynamic reply length | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Per-companion voice selection | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Mood tracking | ✅ Daily + history | ❌ | ❌ | ❌ | ❌ |
 | Persistent memory system | ✅ Auto + Manual | ✅ Limited | ❌ | ✅ Strong | ❌ |
 | Relationship progression tiers | ✅ 5 tiers | ✅ Limited | ❌ | ✅ | ❌ |
 | Personality variety | ✅ 8 distinct | ✅ 1 persona | ✅ User-created | ✅ 1 persona | ✅ Limited |
@@ -886,13 +897,17 @@ Tone: honest, confident, slightly technical (Product Hunt readers appreciate dep
 
 ## 13. Roadmap & Future Vision
 
-### Phase 1 — Launch (Current)
+### Phase 1 — Launch (Complete)
 
 - iOS app with full feature set
-- 8 companion personalities
+- 8 companion personalities with per-companion voice selection
 - Voice calls, memory, relationship progression
+- Mood tracking (daily check-in + 7-day history)
+- Companion waiting indicator
+- Dynamic AI response length
 - Email/Apple/Google auth
 - Railway backend deployment
+- Animated loading screen with first-launch branding
 
 ### Phase 2 — Growth (3–6 Months)
 
@@ -938,6 +953,10 @@ Tone: honest, confident, slightly technical (Product Hunt readers appreciate dep
 | **Push Check-in** | An Expo push notification sent by the server when a user has been away from a companion for 4+ hours |
 | **Relationship Tier** | A named level (New, Acquaintance, Friends, Close, Bonded) associated with a range of relationship level scores |
 | **Custom Personality** | A user-written text field that adds additional instructions or character traits to a companion's system prompt |
+| **Custom Voice** | A user-selected TTS voice (e.g. `nova`, `onyx`) that overrides the companion type's default voice in calls |
+| **Mood Check-in** | A 5-emoji rating (😔–😊) prompted when leaving a chat after at least one exchange; stored as a 1–5 integer |
+| **Mood History** | A 7-day sparkline of mood check-in values displayed on the companion profile screen |
+| **Waiting Indicator** | A pulsing dot shown on a companion card when the user has not chatted for 4+ hours, used to prompt re-engagement |
 | **Streak** | The number of consecutive days a user has sent at least one message to a companion |
 | **Optimistic Update** | A UI pattern where the interface updates immediately before the server confirms, and rolls back if the server returns an error |
 | **Railway** | The cloud hosting platform where the HaloChat API server and PostgreSQL database are deployed |
