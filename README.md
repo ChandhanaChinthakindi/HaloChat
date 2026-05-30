@@ -15,6 +15,7 @@ HaloChat is a mobile app that lets you build meaningful relationships with perso
 - **First-launch 3.5s splash** — New installs hold the loading screen for 3.5 seconds (via `AsyncStorage` flag) so users experience the branding; subsequent launches skip straight to the app
 - **ESLint clean** — All 43 lint problems resolved (13 unescaped-entity errors, 30 warnings including unused imports/vars, exhaustive-deps suppressions for Reanimated shared values, and import order fixes)
 - **Project documentation** — Added detailed App Description section to PROJECT_DOCUMENTATION.md covering user flows, companion types, and system architecture
+- **Legal documents** — Added `docs/PRIVACY_POLICY.md` and `docs/TERMS_AND_CONDITIONS.md` for App Store publishing
 
 ### Previous (v1.0)
 
