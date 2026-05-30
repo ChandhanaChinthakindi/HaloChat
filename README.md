@@ -4,7 +4,17 @@ HaloChat is a mobile app that lets you build meaningful relationships with perso
 
 ---
 
-## Recent Changes (v1.0)
+## Recent Changes (v1.1)
+
+- **Dynamic AI response length** — Reply length scales with the user's message length: 1–2 sentences for short inputs, 2–3 for medium, 3–6 for long; `maxTokens` adjusted accordingly (200 / 350 / 700)
+- **Companion waiting indicator** — After 4 hours of inactivity, companion cards show a pulsing olive dot + "thinking of you" text to encourage re-engagement
+- **Per-companion voice selection** — Voice picker in the Create Companion screen filters voices by companion gender; each option has a play-preview button that streams a type-specific TTS sample
+- **Mood tracking** — On leaving a chat after ≥1 exchange, a mood check-in sheet appears (5-emoji scale); 7-day mood history sparkline shown in companion profile
+- **Keyboard-aware layouts** — Chat input bar and Create Companion footer animate with the keyboard via `useReanimatedKeyboardAnimation` so the text field and submit button are never hidden behind the keyboard
+- **Animated loading screen** — Full-screen launch screen featuring the app icon, "HaloChat" title, and cycling role tagline ("Friend / Lover / Therapist / Supporter") with smooth fade+slide transitions; pulsing loading dots in brand colour
+- **First-launch 3.5s splash** — New installs hold the loading screen for 3.5 seconds (via `AsyncStorage` flag) so users experience the branding; subsequent launches skip straight to the app
+
+### Previous (v1.0)
 
 - **Username uniqueness** — Real-time availability check on signup with debounced `GET /auth/check-username`; inline green/red feedback before form submission
 - **Name collected in onboarding** — Removed name field from signup; onboarding flow collects display name (required) then routes to companion creation
@@ -13,10 +23,9 @@ HaloChat is a mobile app that lets you build meaningful relationships with perso
 - **Memory notes reliability** — `addMemoryNote` / `removeMemoryNote` use optimistic updates with server rollback on failure
 - **Cron job idempotency** — Check-in job uses an `isRunning` guard and marks the DB record before sending the push (at-most-once delivery)
 - **Call screen loading state** — Avatar pulses during `connecting` and `thinking` phases
-- **Memory crash fixes** — Removed `reactCompiler: true` from app.json (unsafe on iOS 26 beta); added `windowSize`, `maxToRenderPerBatch`, and `initialNumToRender` to chat FlatList; `isAliveRef` set immediately on call end to prevent dangling audio objects
-- **Push notification setup** — `HaloChat.entitlements` includes `aps-environment: development`; notifications utility reads EAS `projectId` from app config
+- **Memory crash fixes** — Removed `reactCompiler: true` from app.json; `isAliveRef` set immediately on call end to prevent dangling audio objects
 - **Light theme default** — App defaults to light theme on first install
-- **Test suite** — All 161 tests pass (119 API server + 42 mobile); fixed stale signup fixture and updated message response shape assertions
+- **Test suite** — All 161 tests pass (119 API server + 42 mobile)
 
 ---
 
@@ -50,9 +59,13 @@ HaloChat is a mobile app that lets you build meaningful relationships with perso
 |---|---|
 | **8 Companion Personalities** | Romantic, Flirty, Supportive, Best Friend, Mentor, Anime, Therapist, Roleplay — each with a distinct voice, tone, and system prompt |
 | **Streaming Chat** | Responses stream token-by-token via SSE; multi-part replies shown with typing indicator between each part |
+| **Dynamic Response Length** | AI reply length mirrors the user's message length — short input gets a short reply; long input gets a fuller response |
 | **Voice Calls** | Full turn-based voice loop: record speech → Whisper transcription → AI reply → TTS playback → repeat |
 | **Voice Messages** | In-chat audio recording sent to Whisper; transcript sent as a text message |
+| **Per-Companion Voice** | Select a TTS voice during companion creation; voices filtered by companion gender with live audio preview |
 | **Companion Memory** | Facts extracted automatically from conversations and injected into future system prompts |
+| **Mood Tracking** | Mood check-in (5-emoji scale) on chat exit; 7-day mood history shown in companion profile |
+| **Waiting Indicator** | Companion cards show a pulsing dot after 4h inactivity to prompt re-engagement |
 | **Relationship Progression** | Bond score (0–100) grows with meaningful exchanges; shifts companion tone through 5 tiers |
 | **Push Notifications** | Companions send personalised check-ins when you've been away 4+ hours |
 | **Age-Aware Responses** | Strict mode for users ≤19; relaxed mode for users ≥25 |
@@ -366,6 +379,7 @@ Stores AI companion profiles, one per user per companion.
 | `messageCount` | integer, default 0 | Total messages exchanged |
 | `lastMessage` | text, nullable | Latest message preview |
 | `lastMessageAt` | timestamp, nullable | Time of last chat activity |
+| `customVoice` | text, nullable | User-selected TTS voice override (e.g. `nova`, `onyx`) |
 | `lastCheckinSentAt` | timestamp, nullable | Time of last push check-in sent |
 | `createdAt` | timestamp | |
 
@@ -391,6 +405,19 @@ Stores extracted facts about the user, per companion.
 | `companionId` | UUID (FK → companions) | Cascades on delete |
 | `note` | text | A single extracted fact (max 20 notes per companion) |
 | `createdAt` | timestamp | |
+
+### `mood_logs`
+
+Stores daily mood check-in values per companion.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | UUID (PK) | |
+| `companionId` | UUID (FK → companions) | Cascades on delete |
+| `date` | text | Date in `YYYY-MM-DD` UTC format |
+| `mood` | integer | 1–5 (😔 to 😊) |
+| `createdAt` | timestamp | |
+| — | unique | Constraint on `(companionId, date)` — upsert on re-check |
 
 ### `daily_usage`
 
@@ -433,8 +460,10 @@ All authenticated endpoints require `Authorization: Bearer <access_token>`.
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | `GET` | `/companions` | Yes | List user's companions sorted by last activity. |
-| `POST` | `/companions` | Yes | Create. Body: `{ name, personality, customPersonality?, gender?, avatarColor? }`. |
-| `PATCH` | `/companions/:id` | Yes | Update name, customPersonality, relationshipLevel, avatarColor, etc. |
+| `POST` | `/companions` | Yes | Create. Body: `{ name, personality, customPersonality?, gender?, avatarColor?, customVoice? }`. |
+| `PATCH` | `/companions/:id` | Yes | Update name, customPersonality, customVoice, relationshipLevel, avatarColor, etc. |
+| `POST` | `/companions/:id/mood` | Yes | Log or update today's mood. Body: `{ date, mood }` (mood 1–5). Upserts on same day. |
+| `GET` | `/companions/:id/mood` | Yes | Fetch last 7 days of mood logs. Returns `{ logs: [{ date, mood }] }`. |
 | `DELETE` | `/companions/:id` | Yes | Delete companion and all its messages. |
 
 ### Messages
@@ -605,6 +634,7 @@ Manages companions, messages, memory notes, and relationship state.
   avatarColor: string
   avatarGradient: [string, string]
   customPersonality?: string
+  customVoice?: string
   memoryNotes: string[]
   relationshipLevel: number    // 0–100
   messageCount: number

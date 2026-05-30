@@ -146,7 +146,21 @@ router.post("/companion/chat", requireAuth, dailyLimit, chatLimiter, async (req,
 
   systemPrompt += CONTENT_RESTRICTIONS;
 
-  systemPrompt += `\n\nMatch the energy of the conversation. Be concise by default — short when casual, longer only when the moment genuinely calls for it. Never write more than 4 sentences unless something truly important is being shared.`;
+  const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+  const lastUserLen = lastUserMsg?.content?.length ?? 0;
+  let lengthInstruction: string;
+  let maxTokens: number;
+  if (lastUserLen < 30) {
+    lengthInstruction = `The user sent a very short message. Mirror that energy — reply in 1–2 short sentences max. No long explanations.`;
+    maxTokens = 200;
+  } else if (lastUserLen < 100) {
+    lengthInstruction = `The user sent a medium-length message. Respond naturally in 2–3 sentences. Match their pace.`;
+    maxTokens = 350;
+  } else {
+    lengthInstruction = `The user wrote a lot — they want to be heard. You can respond with more depth here: 3–6 sentences if the moment calls for it. Don't pad — just don't cut yourself short either.`;
+    maxTokens = 700;
+  }
+  systemPrompt += `\n\nRESPONSE LENGTH: ${lengthInstruction}`;
 
   const chatMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
@@ -175,7 +189,7 @@ router.post("/companion/chat", requireAuth, dailyLimit, chatLimiter, async (req,
 
     const stream = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      max_tokens: 500,
+      max_tokens: maxTokens,
       messages: chatMessages,
       stream: true,
     });

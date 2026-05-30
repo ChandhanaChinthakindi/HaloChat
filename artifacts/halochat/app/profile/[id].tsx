@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Platform,
@@ -16,7 +16,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { TypeBadge } from "@/components/TypeBadge";
-import { COMPANION_TYPES, useCompanions } from "@/context/CompanionContext";
+import { API_BASE, COMPANION_TYPES, useCompanions } from "@/context/CompanionContext";
+import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { hapticsNotification } from "@/utils/haptics";
 
@@ -25,12 +26,22 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { companions, updateCompanion, deleteCompanion, clearMessages } = useCompanions();
+  const { authFetch } = useAuth();
 
   const companion = companions.find((c) => c.id === id);
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editPersonality, setEditPersonality] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [moodHistory, setMoodHistory] = useState<{ date: string; mood: number }[]>([]);
+
+  useEffect(() => {
+    if (!id) return;
+    authFetch(`${API_BASE}/companions/${id}/mood`)
+      .then((r) => r.json())
+      .then((data) => { if (Array.isArray(data)) setMoodHistory(data); })
+      .catch(() => {});
+  }, [id]);
 
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
   const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
@@ -272,6 +283,23 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
 
+        {/* 7-day mood history */}
+        {moodHistory.length > 0 && (
+          <View style={[styles.section, { paddingHorizontal: 20 }]}>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Mood This Week</Text>
+            <View style={styles.moodHistoryRow}>
+              {buildMoodDays(moodHistory).map(({ label, mood }, i) => (
+                <View key={i} style={styles.moodDay}>
+                  <Text style={styles.moodDayEmoji}>
+                    {mood != null ? ["😔", "😕", "😐", "🙂", "😊"][mood - 1] : "·"}
+                  </Text>
+                  <Text style={[styles.moodDayLabel, { color: colors.mutedForeground }]}>{label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
         <View style={[styles.actions, { paddingHorizontal: 20 }]}>
           <Pressable
             onPress={() => router.push(`/chat/${companion.id}`)}
@@ -312,6 +340,18 @@ export default function ProfileScreen() {
       </ScrollView>
     </View>
   );
+}
+
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function buildMoodDays(logs: { date: string; mood: number }[]): { label: string; mood: number | null }[] {
+  const map = new Map(logs.map((l) => [l.date, l.mood]));
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    const key = d.toISOString().slice(0, 10);
+    return { label: DAY_LABELS[d.getDay()], mood: map.get(key) ?? null };
+  });
 }
 
 function StatCard({ label, value, colors }: { label: string; value: string; colors: any }) {
@@ -565,4 +605,8 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     fontWeight: "600" as const,
   },
+  moodHistoryRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 4 },
+  moodDay: { alignItems: "center", gap: 4, flex: 1 },
+  moodDayEmoji: { fontSize: 22 },
+  moodDayLabel: { fontSize: 10, fontFamily: "Inter_400Regular" },
 });

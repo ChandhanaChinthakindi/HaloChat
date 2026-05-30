@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { eq, desc, and, inArray, lt, asc } from "drizzle-orm";
-import { db, companionsTable, messagesTable, memoryNotesTable } from "@workspace/db";
+import { eq, desc, and, inArray, lt, asc, gte } from "drizzle-orm";
+import { db, companionsTable, messagesTable, memoryNotesTable, moodLogsTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { requireAuth } from "../middleware/auth";
 
@@ -23,7 +23,7 @@ router.get("/companions", requireAuth, async (req, res) => {
 
 // POST /companions
 router.post("/companions", requireAuth, async (req, res) => {
-  const { name, personality, customPersonality, avatarColor, gender } = req.body;
+  const { name, personality, customPersonality, avatarColor, gender, customVoice } = req.body;
   if (!name || !personality) {
     res.status(400).json({ error: "name and personality are required" });
     return;
@@ -31,7 +31,7 @@ router.post("/companions", requireAuth, async (req, res) => {
   try {
     const [companion] = await db
       .insert(companionsTable)
-      .values({ userId: req.userId!, name, personality, customPersonality, gender: gender || null, avatarColor: avatarColor || "purple" })
+      .values({ userId: req.userId!, name, personality, customPersonality, gender: gender || null, avatarColor: avatarColor || "purple", customVoice: customVoice || null })
       .returning();
     res.json(companion);
   } catch (err) {
@@ -43,7 +43,7 @@ router.post("/companions", requireAuth, async (req, res) => {
 // PATCH /companions/:id
 router.patch("/companions/:id", requireAuth, async (req, res) => {
   const { id } = req.params;
-  const { relationshipLevel, messageCount, lastMessage, lastMessageAt, name, customPersonality, avatarColor } = req.body;
+  const { relationshipLevel, messageCount, lastMessage, lastMessageAt, name, customPersonality, avatarColor, customVoice } = req.body;
   try {
     const updates: Partial<typeof companionsTable.$inferInsert> = {};
     if (relationshipLevel !== undefined) updates.relationshipLevel = relationshipLevel;
@@ -53,6 +53,7 @@ router.patch("/companions/:id", requireAuth, async (req, res) => {
     if (name !== undefined) updates.name = name;
     if (customPersonality !== undefined) updates.customPersonality = customPersonality;
     if (avatarColor !== undefined) updates.avatarColor = avatarColor;
+    if (customVoice !== undefined) updates.customVoice = customVoice || null;
 
     const [updated] = await db
       .update(companionsTable)
@@ -247,6 +248,62 @@ router.put("/companions/:id/memory", requireAuth, async (req, res) => {
         .values(notes.map((note) => ({ companionId: id, note })));
     }
     res.json({ success: true });
+  } catch (err) {
+    logger.error({ err }, "Database error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /companions/:id/mood — upsert today's mood (1–5)
+router.post("/companions/:id/mood", requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const { mood } = req.body as { mood: number };
+  if (typeof mood !== "number" || mood < 1 || mood > 5) {
+    res.status(400).json({ error: "mood must be 1–5" });
+    return;
+  }
+  try {
+    const [companion] = await db
+      .select({ id: companionsTable.id })
+      .from(companionsTable)
+      .where(and(eq(companionsTable.id, id), eq(companionsTable.userId, req.userId!)));
+    if (!companion) {
+      res.status(404).json({ error: "Companion not found" });
+      return;
+    }
+    const date = new Date().toISOString().slice(0, 10);
+    await db
+      .insert(moodLogsTable)
+      .values({ companionId: id, date, mood })
+      .onConflictDoUpdate({ target: [moodLogsTable.companionId, moodLogsTable.date], set: { mood } });
+    res.json({ success: true, date, mood });
+  } catch (err) {
+    logger.error({ err }, "Database error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /companions/:id/mood — last 7 days of mood logs
+router.get("/companions/:id/mood", requireAuth, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [companion] = await db
+      .select({ id: companionsTable.id })
+      .from(companionsTable)
+      .where(and(eq(companionsTable.id, id), eq(companionsTable.userId, req.userId!)));
+    if (!companion) {
+      res.status(404).json({ error: "Companion not found" });
+      return;
+    }
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    const cutoff = sevenDaysAgo.toISOString().slice(0, 10);
+    const logs = await db
+      .select({ date: moodLogsTable.date, mood: moodLogsTable.mood })
+      .from(moodLogsTable)
+      .where(and(eq(moodLogsTable.companionId, id), gte(moodLogsTable.date, cutoff)))
+      .orderBy(asc(moodLogsTable.date));
+    res.json(logs);
   } catch (err) {
     logger.error({ err }, "Database error");
     res.status(500).json({ error: "Internal server error" });

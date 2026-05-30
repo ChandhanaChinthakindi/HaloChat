@@ -1,28 +1,73 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Audio } from "expo-av";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import { ImpactFeedbackStyle } from "expo-haptics";
 import { hapticsImpact, hapticsSelection } from "@/utils/haptics";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import Animated, { Extrapolation, interpolate, useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
+import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 
 import { TypeCard } from "@/components/TypeBadge";
 import {
+  API_BASE,
   COMPANION_TYPES,
   type CompanionType,
   useCompanions,
 } from "@/context/CompanionContext";
+import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+
+const VOICE_SAMPLES: Record<CompanionType, string> = {
+  romantic:   "I've been thinking about you all day. It's really good to hear from you.",
+  flirty:     "Okay, I was going to play it cool, but honestly? I'm glad you're here.",
+  supportive: "Hey, I'm here. Whatever's on your mind — I'm listening, no rush.",
+  mentor:     "Let's figure this out together. What's the real challenge you're facing?",
+  anime:      "YOU'RE HERE! I've been waiting so long — this is literally the best day!",
+  bestfriend: "Okay spill. What happened? I need to know absolutely everything right now.",
+  therapist:  "Take your time. There's no pressure here — I'm just glad you reached out.",
+  roleplay:   "The story is waiting... wherever you want to begin, I'll be right there with you.",
+};
+
+const VOICES_BY_GENDER: Record<string, { id: string; label: string }[]> = {
+  female:   [
+    { id: "nova",    label: "Nova" },
+    { id: "coral",   label: "Coral" },
+    { id: "shimmer", label: "Shimmer" },
+    { id: "ballad",  label: "Ballad" },
+    { id: "alloy",   label: "Alloy" },
+  ],
+  male:     [
+    { id: "onyx",  label: "Onyx" },
+    { id: "echo",  label: "Echo" },
+    { id: "ash",   label: "Ash" },
+    { id: "fable", label: "Fable" },
+    { id: "sage",  label: "Sage" },
+  ],
+  nonbinary: [
+    { id: "nova",    label: "Nova" },
+    { id: "coral",   label: "Coral" },
+    { id: "shimmer", label: "Shimmer" },
+    { id: "alloy",   label: "Alloy" },
+    { id: "onyx",    label: "Onyx" },
+    { id: "echo",    label: "Echo" },
+    { id: "ash",     label: "Ash" },
+    { id: "sage",    label: "Sage" },
+  ],
+};
 
 const COMPANION_SAMPLES: Record<CompanionType, string> = {
   romantic: "thinking about you... hope your day's been good ♡",
@@ -50,6 +95,7 @@ export default function CreateScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { createCompanion } = useCompanions();
+  const { accessToken } = useAuth();
   const params = useLocalSearchParams<{ type?: CompanionType }>();
 
   const preselected = params.type ?? null;
@@ -57,11 +103,29 @@ export default function CreateScreen() {
   const [name, setName] = useState("");
   const [selectedType, setSelectedType] = useState<CompanionType | null>(preselected);
   const [gender, setGender] = useState<"female" | "male" | "nonbinary" | null>(null);
+  const [selectedVoice, setSelectedVoice] = useState<string | null>(null);
+  const [playingVoice, setPlayingVoice] = useState<string | null>(null);
+  const [loadingVoice, setLoadingVoice] = useState<string | null>(null);
   const [customPersonality, setCustomPersonality] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const soundRef = useRef<Audio.Sound | null>(null);
+
+  // Reset voice selection when gender changes
+  useEffect(() => { setSelectedVoice(null); }, [gender]);
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => { soundRef.current?.unloadAsync().catch(() => {}); };
+  }, []);
 
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
   const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
+
+  const { height: kbHeight, progress: kbProgress } = useReanimatedKeyboardAnimation();
+  const footerAnimStyle = useAnimatedStyle(() => ({
+    bottom: -kbHeight.value,
+    paddingBottom: interpolate(kbProgress.value, [0, 1], [bottomPadding + 16, 8], Extrapolation.CLAMP),
+  }));
 
   const canCreate = name.trim().length > 0 && selectedType !== null;
 
@@ -69,8 +133,54 @@ export default function CreateScreen() {
     ? COMPANION_TYPES[selectedType].gradient
     : ["#818263", "#6B5E45"];
 
+  const voiceOptions = gender ? VOICES_BY_GENDER[gender] ?? [] : [];
+  const defaultVoice = selectedType ? COMPANION_TYPES[selectedType].voice : "nova";
+  const effectiveVoice = selectedVoice ?? defaultVoice;
+
+  const handlePlayVoice = async (voiceId: string) => {
+    // Stop current playback
+    if (soundRef.current) {
+      await soundRef.current.stopAsync().catch(() => {});
+      await soundRef.current.unloadAsync().catch(() => {});
+      soundRef.current = null;
+    }
+    if (playingVoice === voiceId) {
+      setPlayingVoice(null);
+      return;
+    }
+    setLoadingVoice(voiceId);
+    try {
+      if (Platform.OS !== "web") {
+        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false });
+      }
+      const sample = selectedType ? VOICE_SAMPLES[selectedType] : VOICE_SAMPLES.supportive;
+      const url = `${API_BASE}/companion/tts?text=${encodeURIComponent(sample)}&voice=${voiceId}`;
+      const source = { uri: url, headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined };
+      const { sound } = await Audio.Sound.createAsync(source, { shouldPlay: true });
+      soundRef.current = sound;
+      setPlayingVoice(voiceId);
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setPlayingVoice(null);
+          sound.unloadAsync().catch(() => {});
+          soundRef.current = null;
+        }
+      });
+    } catch {
+      // silent fail — voice preview is best-effort
+    } finally {
+      setLoadingVoice(null);
+    }
+  };
+
   const handleCreate = async () => {
     if (!canCreate || !selectedType) return;
+    // Stop any playing preview before creating
+    if (soundRef.current) {
+      await soundRef.current.stopAsync().catch(() => {});
+      await soundRef.current.unloadAsync().catch(() => {});
+      soundRef.current = null;
+    }
     setIsCreating(true);
     await hapticsImpact(ImpactFeedbackStyle.Medium);
     try {
@@ -79,6 +189,7 @@ export default function CreateScreen() {
         selectedType,
         customPersonality.trim() || undefined,
         gender ?? undefined,
+        selectedVoice ?? undefined,
       );
       router.replace(`/chat/${companion.id}`);
     } catch {
@@ -103,7 +214,7 @@ export default function CreateScreen() {
       </View>
 
       <KeyboardAwareScrollViewCompat
-        contentContainerStyle={[styles.content, { paddingBottom: bottomPadding + 120 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: bottomPadding + 100 }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -169,6 +280,21 @@ export default function CreateScreen() {
                 );
               })}
             </View>
+
+            {/* Voice picker */}
+            {voiceOptions.length > 0 && (
+              <VoicePicker
+                voices={voiceOptions}
+                selectedVoice={effectiveVoice}
+                defaultVoice={defaultVoice}
+                playingVoice={playingVoice}
+                loadingVoice={loadingVoice}
+                activeGradient={activeGradient}
+                colors={colors}
+                onSelect={(id) => { hapticsSelection(); setSelectedVoice(id === defaultVoice ? null : id); }}
+                onPlay={handlePlayVoice}
+              />
+            )}
 
             {/* Custom personality */}
             <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
@@ -270,6 +396,21 @@ export default function CreateScreen() {
               </>
             )}
 
+            {/* Voice picker — only once gender is chosen */}
+            {voiceOptions.length > 0 && (
+              <VoicePicker
+                voices={voiceOptions}
+                selectedVoice={effectiveVoice}
+                defaultVoice={defaultVoice}
+                playingVoice={playingVoice}
+                loadingVoice={loadingVoice}
+                activeGradient={activeGradient}
+                colors={colors}
+                onSelect={(id) => { hapticsSelection(); setSelectedVoice(id === defaultVoice ? null : id); }}
+                onPlay={handlePlayVoice}
+              />
+            )}
+
             <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
               CUSTOM PERSONALITY <Text style={{ fontWeight: "400" as const }}>(OPTIONAL)</Text>
             </Text>
@@ -294,7 +435,7 @@ export default function CreateScreen() {
       </KeyboardAwareScrollViewCompat>
 
       {/* Footer CTA */}
-      <View style={[styles.footer, { paddingBottom: bottomPadding + 16, borderTopColor: colors.border, backgroundColor: colors.background }]}>
+      <Animated.View style={[styles.footer, footerAnimStyle, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
         <Pressable
           onPress={handleCreate}
           disabled={!canCreate || isCreating}
@@ -312,8 +453,75 @@ export default function CreateScreen() {
             </Text>
           </LinearGradient>
         </Pressable>
-      </View>
+      </Animated.View>
     </View>
+  );
+}
+
+function VoicePicker({
+  voices, selectedVoice, defaultVoice, playingVoice, loadingVoice,
+  activeGradient, colors, onSelect, onPlay,
+}: {
+  voices: { id: string; label: string }[];
+  selectedVoice: string;
+  defaultVoice: string;
+  playingVoice: string | null;
+  loadingVoice: string | null;
+  activeGradient: [string, string];
+  colors: any;
+  onSelect: (id: string) => void;
+  onPlay: (id: string) => void;
+}) {
+  return (
+    <>
+      <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>VOICE</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.voiceScroll} contentContainerStyle={styles.voiceScrollContent}>
+        {voices.map((v) => {
+          const isSelected = selectedVoice === v.id;
+          const isDefault = defaultVoice === v.id;
+          const isPlaying = playingVoice === v.id;
+          const isLoading = loadingVoice === v.id;
+          return (
+            <Pressable
+              key={v.id}
+              onPress={() => onSelect(v.id)}
+              style={[
+                styles.voiceChip,
+                {
+                  backgroundColor: isSelected ? `${activeGradient[0]}18` : colors.card,
+                  borderColor: isSelected ? activeGradient[0] : colors.border,
+                },
+              ]}
+            >
+              <View style={styles.voiceChipTop}>
+                {isSelected && <Ionicons name="checkmark-circle" size={13} color={activeGradient[0]} />}
+                <Text style={[styles.voiceChipLabel, { color: isSelected ? activeGradient[0] : colors.foreground }]}>
+                  {v.label}
+                </Text>
+                {isDefault && (
+                  <Text style={[styles.voiceChipDefault, { color: colors.mutedForeground }]}>default</Text>
+                )}
+              </View>
+              <Pressable
+                onPress={(e) => { e.stopPropagation?.(); onPlay(v.id); }}
+                style={[styles.voicePlayBtn, { backgroundColor: isPlaying ? `${activeGradient[0]}25` : `${colors.mutedForeground}15` }]}
+                hitSlop={6}
+              >
+                {isLoading ? (
+                  <ActivityIndicator size={12} color={activeGradient[0]} />
+                ) : (
+                  <Ionicons
+                    name={isPlaying ? "stop" : "play"}
+                    size={12}
+                    color={isPlaying ? activeGradient[0] : colors.mutedForeground}
+                  />
+                )}
+              </Pressable>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </>
   );
 }
 
@@ -390,6 +598,28 @@ const styles = StyleSheet.create({
   previewDesc: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
   previewBubble: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7, marginTop: 4 },
   previewSample: { fontSize: 13, fontFamily: "Inter_400Regular", fontStyle: "italic", lineHeight: 19 },
+  // Voice picker
+  voiceScroll: { marginHorizontal: -4 },
+  voiceScrollContent: { paddingHorizontal: 4, gap: 8, flexDirection: "row" },
+  voiceChip: {
+    borderRadius: 16,
+    borderWidth: 1.5,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 8,
+    minWidth: 90,
+    alignItems: "center",
+  },
+  voiceChipTop: { flexDirection: "row", alignItems: "center", gap: 4 },
+  voiceChipLabel: { fontSize: 13, fontFamily: "Inter_500Medium", fontWeight: "500" as const },
+  voiceChipDefault: { fontSize: 10, fontFamily: "Inter_400Regular" },
+  voicePlayBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   // Footer
   footer: { position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingTop: 16, borderTopWidth: StyleSheet.hairlineWidth },
   createButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 18, borderRadius: 32 },

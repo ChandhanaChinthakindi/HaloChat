@@ -249,7 +249,8 @@ export default function CallScreen() {
   const playTTS = useCallback(async (text: string, onStart?: () => void): Promise<void> => {
     if (!companion) return;
     const typeInfo = COMPANION_TYPES[companion.type];
-    const url = `${API_BASE}/companion/tts?text=${encodeURIComponent(text.slice(0, 600))}&voice=${typeInfo.voice}&companionId=${companion.id}`;
+    const voice = companion.customVoice || typeInfo.voice;
+    const url = `${API_BASE}/companion/tts?text=${encodeURIComponent(text.slice(0, 600))}&voice=${voice}&companionId=${companion.id}`;
 
     return new Promise((resolve) => {
       const load = async () => {

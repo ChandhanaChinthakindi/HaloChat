@@ -19,6 +19,8 @@ import {
   View,
 } from "react-native";
 import Animated, {
+  Extrapolation,
+  interpolate,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -27,7 +29,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
-import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { KeyboardAvoidingView, useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ChatBubble } from "@/components/ChatBubble";
@@ -80,6 +82,7 @@ export default function ChatScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [retryContent, setRetryContent] = useState<string | null>(null);
+  const [showMoodModal, setShowMoodModal] = useState(false);
   const initialMessageIdsRef = useRef<Set<string>>(new Set());
   const moodScale = useSharedValue(1);
   const moodStyle = useAnimatedStyle(() => ({ transform: [{ scale: moodScale.value }] }));
@@ -99,6 +102,16 @@ export default function ChatScreen() {
 
   const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
+
+  const { progress: kbProgress } = useReanimatedKeyboardAnimation();
+  const inputBarPaddingStyle = useAnimatedStyle(() => ({
+    paddingBottom: interpolate(
+      kbProgress.value,
+      [0, 1],
+      [bottomPadding + 8, 8],
+      Extrapolation.CLAMP,
+    ),
+  }));
 
   const recordPulse = useSharedValue(1);
   const recordStyle = useAnimatedStyle(() => ({
@@ -766,6 +779,20 @@ export default function ChatScreen() {
     else startRecording();
   };
 
+  const handleMoodSelect = async (moodValue: number) => {
+    setShowMoodModal(false);
+    if (companion && moodValue > 0) {
+      try {
+        await authFetch(`${API_BASE}/companions/${companion.id}/mood`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mood: moodValue }),
+        });
+      } catch {}
+    }
+    router.back();
+  };
+
   if (!companion) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -816,7 +843,11 @@ export default function ChatScreen() {
           onPress={() => {
             if (isSelectMode) { setIsSelectMode(false); setSelectedIds(new Set()); return; }
             abortRef.current?.abort();
-            router.back();
+            if (sessionExchangesRef.current > 0) {
+              setShowMoodModal(true);
+            } else {
+              router.back();
+            }
           }}
           style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
         >
@@ -1033,11 +1064,11 @@ export default function ChatScreen() {
       )}
 
       {/* Input bar */}
-      <View
+      <Animated.View
         style={[
           styles.inputBar,
+          inputBarPaddingStyle,
           {
-            paddingBottom: bottomPadding + 12,
             borderTopColor: colors.border,
             backgroundColor: colors.background,
           },
@@ -1130,7 +1161,7 @@ export default function ChatScreen() {
             </LinearGradient>
           </Pressable>
         </View>
-      </View>
+      </Animated.View>
 
       {/* Multi-select delete bar */}
       {isSelectMode && (
@@ -1160,6 +1191,14 @@ export default function ChatScreen() {
           companionName={companion.name}
           companionGradient={companion.avatarGradient}
           onDismiss={() => setMilestoneLevel(null)}
+        />
+      )}
+
+      {showMoodModal && (
+        <MoodCheckIn
+          companionName={companion.name}
+          colors={colors}
+          onSelect={handleMoodSelect}
         />
       )}
     </KeyboardAvoidingView>
@@ -1233,6 +1272,45 @@ function GreetingCard({
           ))}
         </View>
       )}
+    </View>
+  );
+}
+
+const MOOD_EMOJIS = ["😔", "😕", "😐", "🙂", "😊"];
+
+function MoodCheckIn({
+  companionName,
+  colors,
+  onSelect,
+}: {
+  companionName: string;
+  colors: any;
+  onSelect: (mood: number) => void;
+}) {
+  return (
+    <View style={styles.moodOverlay}>
+      <View style={[styles.moodSheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.moodTitle, { color: colors.foreground }]}>
+          How are you feeling?
+        </Text>
+        <Text style={[styles.moodSub, { color: colors.mutedForeground }]}>
+          After chatting with {companionName}
+        </Text>
+        <View style={styles.moodRow}>
+          {MOOD_EMOJIS.map((emoji, i) => (
+            <Pressable
+              key={i}
+              onPress={() => onSelect(i + 1)}
+              style={({ pressed }) => [styles.moodBtn, { opacity: pressed ? 0.6 : 1 }]}
+            >
+              <Text style={styles.moodEmoji}>{emoji}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Pressable onPress={() => onSelect(0)} style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}>
+          <Text style={[styles.moodSkip, { color: colors.mutedForeground }]}>Skip</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -1500,9 +1578,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  moodEmoji: {
-    fontSize: 20,
-  },
   greetingChips: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1658,4 +1733,26 @@ const styles = StyleSheet.create({
   greetingType: { fontSize: 14, fontFamily: "Inter_500Medium", fontWeight: "500" as const },
   greetingDesc: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 21 },
   greetingHint: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 4, textAlign: "center" },
+  moodOverlay: {
+    position: "absolute",
+    inset: 0,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    paddingBottom: 40,
+  },
+  moodSheet: {
+    width: "90%",
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 24,
+    alignItems: "center",
+    gap: 12,
+  },
+  moodTitle: { fontSize: 18, fontWeight: "600" as const, fontFamily: "Inter_600SemiBold", textAlign: "center" },
+  moodSub: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: -4 },
+  moodRow: { flexDirection: "row", gap: 12, marginTop: 4 },
+  moodBtn: { padding: 6 },
+  moodEmoji: { fontSize: 26 },
+  moodSkip: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 4 },
 });

@@ -30,6 +30,7 @@ export const companionsTable = pgTable("companions", {
   avatarColor: text("avatar_color").notNull().default("purple"),
   relationshipLevel: integer("relationship_level").notNull().default(0),
   messageCount: integer("message_count").notNull().default(0),
+  customVoice: text("custom_voice"), // OpenAI TTS voice override
   lastMessage: text("last_message"),
   lastMessageAt: timestamp("last_message_at"),
   lastCheckinSentAt: timestamp("last_checkin_sent_at"),
@@ -54,6 +55,15 @@ export const memoryNotesTable = pgTable("memory_notes", {
   note: text("note").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+// Tracks user-reported mood after each chat session (1 = very sad, 5 = great)
+export const moodLogsTable = pgTable("mood_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companionId: uuid("companion_id").notNull().references(() => companionsTable.id, { onDelete: "cascade" }),
+  date: text("date").notNull(), // YYYY-MM-DD UTC
+  mood: integer("mood").notNull(), // 1–5
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [unique().on(t.companionId, t.date)]);
 
 // Tracks per-companion daily OpenAI request counts for cost control (~$0.30/day/companion)
 export const dailyUsageTable = pgTable("daily_usage", {

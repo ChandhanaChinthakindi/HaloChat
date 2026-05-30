@@ -27,6 +27,7 @@ export interface Companion {
   avatarColor: string;
   avatarGradient: [string, string];
   customPersonality?: string;
+  customVoice?: string;
   memoryNotes: string[];
   relationshipLevel: number;
   messageCount: number;
@@ -176,6 +177,7 @@ function dbToCompanion(raw: any, memoryNotes: string[] = []): Companion {
     avatarColor: raw.avatarColor || gradient[0],
     avatarGradient: gradient,
     customPersonality: raw.customPersonality || undefined,
+    customVoice: raw.customVoice || undefined,
     memoryNotes,
     relationshipLevel: raw.relationshipLevel ?? 0,
     messageCount: raw.messageCount ?? 0,
@@ -206,9 +208,10 @@ interface CompanionContextType {
     name: string,
     type: CompanionType,
     customPersonality?: string,
-    gender?: "male" | "female" | "nonbinary"
+    gender?: "male" | "female" | "nonbinary",
+    customVoice?: string
   ) => Promise<Companion>;
-  updateCompanion: (id: string, patch: { name?: string; customPersonality?: string }) => Promise<void>;
+  updateCompanion: (id: string, patch: { name?: string; customPersonality?: string; customVoice?: string | null }) => Promise<void>;
   togglePin: (id: string) => Promise<void>;
   deleteCompanion: (id: string) => Promise<void>;
   getMessages: (companionId: string, before?: string) => Promise<{ messages: Message[]; hasMore: boolean; nextCursor: string | null }>;
@@ -308,13 +311,14 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       name: string,
       type: CompanionType,
       customPersonality?: string,
-      gender?: "male" | "female" | "nonbinary"
+      gender?: "male" | "female" | "nonbinary",
+      customVoice?: string
     ): Promise<Companion> => {
       const gradient = COMPANION_TYPES[type].gradient;
       const res = await authFetch(`${API_BASE}/companions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, personality: type, customPersonality, gender, avatarColor: gradient[0] }),
+        body: JSON.stringify({ name, personality: type, customPersonality, gender, avatarColor: gradient[0], customVoice: customVoice || null }),
       });
       if (!res.ok) throw new Error("Failed to create companion");
       const raw = await res.json();
@@ -326,7 +330,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updateCompanion = useCallback(
-    async (id: string, patch: { name?: string; customPersonality?: string }) => {
+    async (id: string, patch: { name?: string; customPersonality?: string; customVoice?: string | null }) => {
       await authFetch(`${API_BASE}/companions/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -335,7 +339,12 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       setCompanions((prev) =>
         prev.map((c) =>
           c.id === id
-            ? { ...c, ...patch, customPersonality: patch.customPersonality || undefined }
+            ? {
+                ...c,
+                ...patch,
+                customPersonality: patch.customPersonality || undefined,
+                customVoice: patch.customVoice === null ? undefined : (patch.customVoice || c.customVoice),
+              }
             : c
         )
       );

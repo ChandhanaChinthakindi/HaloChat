@@ -1,12 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import React from "react";
+import React, { useEffect } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
+  withRepeat,
+  withSequence,
   withSpring,
+  withTiming,
 } from "react-native-reanimated";
+
+const WAITING_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 import { COMPANION_TYPES, type Companion } from "@/context/CompanionContext";
 import { useColors } from "@/hooks/useColors";
@@ -23,6 +28,11 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 export function CompanionCard({ companion, onPress, onCallPress, onLongPress }: Props) {
   const colors = useColors();
   const scale = useSharedValue(1);
+
+  const isWaiting =
+    (companion.messageCount ?? 0) >= 2 &&
+    companion.lastMessageTime != null &&
+    Date.now() - companion.lastMessageTime > WAITING_THRESHOLD_MS;
 
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -73,14 +83,17 @@ export function CompanionCard({ companion, onPress, onCallPress, onLongPress }: 
           },
         ]}
       >
-        <LinearGradient
-          colors={companion.avatarGradient}
-          style={styles.avatar}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <Text style={styles.initials}>{initials}</Text>
-        </LinearGradient>
+        <View>
+          <LinearGradient
+            colors={companion.avatarGradient}
+            style={styles.avatar}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Text style={styles.initials}>{initials}</Text>
+          </LinearGradient>
+          {isWaiting && <WaitingDot />}
+        </View>
 
         <View style={styles.content}>
           <View style={styles.topRow}>
@@ -113,10 +126,10 @@ export function CompanionCard({ companion, onPress, onCallPress, onLongPress }: 
 
           {companion.lastMessage ? (
             <Text
-              style={[styles.lastMessage, { color: colors.mutedForeground }]}
+              style={[styles.lastMessage, { color: isWaiting ? colors.primary : colors.mutedForeground }]}
               numberOfLines={1}
             >
-              {companion.lastMessage}
+              {isWaiting ? `${companion.name} is thinking of you...` : companion.lastMessage}
             </Text>
           ) : (
             <Text style={[styles.noMessage, { color: colors.mutedForeground }]}>
@@ -161,6 +174,32 @@ export function CompanionCard({ companion, onPress, onCallPress, onLongPress }: 
         </View>
       </View>
     </AnimatedPressable>
+  );
+}
+
+function WaitingDot() {
+  const opacity = useSharedValue(1);
+
+  useEffect(() => {
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(0.2, { duration: 900 }),
+        withTiming(1, { duration: 900 })
+      ),
+      -1,
+      false
+    );
+  }, []);
+
+  const dotStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+
+  return (
+    <Animated.View
+      style={[
+        styles.waitingDot,
+        dotStyle,
+      ]}
+    />
   );
 }
 
@@ -242,5 +281,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
+  },
+  waitingDot: {
+    position: "absolute",
+    bottom: 1,
+    right: 1,
+    width: 13,
+    height: 13,
+    borderRadius: 7,
+    backgroundColor: "#818263",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
   },
 });
