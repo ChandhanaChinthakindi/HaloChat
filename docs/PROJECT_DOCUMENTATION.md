@@ -43,6 +43,47 @@ Modern loneliness is at an epidemic scale. Millions of people lack meaningful, n
 
 HaloChat is not a general-purpose chatbot. It is a relationship-first mobile app. Each companion has a distinct personality, a voice, a memory of who you are, and a bond that deepens the more time you spend together. Users can chat in text or have a real voice conversation — just like calling someone who knows them.
 
+### App Description
+
+**HaloChat** is an iOS AI companion app that lets users build ongoing, emotionally meaningful relationships with personalised AI characters. Unlike general-purpose chatbots, HaloChat is built around a single premise: your companion should feel like a *real relationship* — one that remembers you, grows with you, and is always available.
+
+#### What Users Can Do
+
+Users create a companion by choosing from 8 distinct personality archetypes, picking a name, selecting a voice, and optionally writing a custom personality note. From that point:
+
+- **Chat in real time** — Text messages stream token-by-token so responses appear as the AI "types." Reply length adapts to the user's message: short inputs get concise replies; long, detailed messages get fuller responses.
+- **Make a voice call** — Tapping the call button opens a full-screen voice call experience. The app records the user's speech, transcribes it via OpenAI Whisper, generates a reply with GPT-4o-mini, and plays it back through a natural-sounding TTS voice — all in a seamless turn-based loop with automatic silence detection.
+- **Send voice messages** — In chat, users can record and send voice notes; the app transcribes them before sending to the AI.
+- **Build a bond** — Every interaction adds to the companion's bond score (0–100 across 5 named tiers: New → Acquaintance → Friend → Close → Bonded). As the tier increases, the companion's tone shifts from curious and slightly formal to warm, familiar, and emotionally open.
+- **Be remembered** — After conversations, GPT-4o-mini extracts meaningful personal facts (goals, life events, preferences, relationships) and stores them as memory notes. These notes are injected into every future prompt so the companion actually *knows* the user.
+- **Track their mood** — When leaving a chat after a real exchange, a mood check-in sheet appears (5-emoji scale). A 7-day mood sparkline is visible on the companion's profile page.
+- **Receive check-ins** — After 4+ hours of inactivity, the companion card shows a pulsing "thinking of you" indicator and the app sends a personalised push notification.
+
+#### The 8 Companion Personality Types
+
+| Type | Character |
+|---|---|
+| **Romantic** | Devoted, affectionate, emotionally intimate; speaks with warmth and genuine care |
+| **Flirty** | Playful, witty, charming; light-hearted banter with an undercurrent of attraction |
+| **Supportive** | Empathetic, encouraging, steady; listens without judgment and validates feelings |
+| **Best Friend** | Casual, fun, loyal; jokes around, gives honest opinions, feels like a real mate |
+| **Mentor** | Thoughtful, challenging, growth-oriented; pushes the user to think and improve |
+| **Anime** | Expressive, dramatic, pop-culture-aware; leans into anime tropes and enthusiastic energy |
+| **Therapist** | Calm, reflective, technique-informed; uses active listening and reframes negative thoughts |
+| **Roleplay** | Creative, adaptive, story-driven; collaborative fiction and character-driven scenarios |
+
+Each type is powered by a distinct system prompt that defines tone, vocabulary, behavioural rules, and content approach — not just a different name over the same model call.
+
+#### How It Works Under the Hood
+
+1. **User opens the app** → Auth check → Companion list loaded from the backend.
+2. **Chat screen** → User message POSTed to `POST /companion/:id/chat/stream` → Express route builds a full system prompt (personality + memory notes + relationship tier + age-aware rules) → OpenAI `stream: true` response forwarded as SSE to the mobile client.
+3. **Voice call** → Client records audio → POSTed to `POST /companion/:id/voice-call` → Whisper transcription → same prompt pipeline as text → TTS-1 audio returned as `audio/mpeg` → client plays via `expo-av`.
+4. **Memory extraction** → After every 4+ message exchange, `POST /companion/:id/memory/extract` sends the recent conversation to GPT-4o-mini asking it to identify new personal facts → merged and stored in `memory_notes` table.
+5. **Mood & profile** → Mood score written to `mood_logs` table; companion profile page reads 7-day history and renders a sparkline.
+
+---
+
 ### What Problem Are We Solving?
 
 | Problem | How HaloChat Addresses It |
