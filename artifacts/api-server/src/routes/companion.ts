@@ -403,7 +403,7 @@ router.post(
         ? "mp3"
         : "m4a";
 
-      const audioFile = new File([file.buffer], `audio.${ext}`, {
+      const audioFile = new File([file.buffer as unknown as Uint8Array<ArrayBuffer>], `audio.${ext}`, {
         type: file.mimetype,
       });
 

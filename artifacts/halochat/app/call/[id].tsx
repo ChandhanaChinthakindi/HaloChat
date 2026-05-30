@@ -625,10 +625,6 @@ export default function CallScreen() {
     processRecordingRef.current = processRecording;
   }, [processRecording]);
 
-  useEffect(() => {
-    endCallRef.current = endCall;
-  }, [endCall]);
-
   // When user toggles mute on while recording, stop listening
   useEffect(() => {
     if (isMuted && phaseRef.current === "recording") {
@@ -780,6 +776,11 @@ export default function CallScreen() {
     await hapticsNotification(NotificationFeedbackType.Warning);
     router.back();
   }, [companion, updateRelationshipLevel, stopSound, clearSilenceTimer, extractMemories]);
+
+  // Keep endCallRef pointing at the latest closure (declared after endCall to avoid TDZ)
+  useEffect(() => {
+    endCallRef.current = endCall;
+  }, [endCall]);
 
   if (!companion) {
     return (

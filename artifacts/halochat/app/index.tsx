@@ -3,6 +3,7 @@ import { Redirect } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Dimensions, Image, StyleSheet, Text, View } from "react-native";
 import Animated, {
+  type SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -61,7 +62,7 @@ function LoadingScreen() {
     }, 2200);
 
     // Loading dots
-    const dotAnim = (shared: Animated.SharedValue<number>, delay: number) => {
+    const dotAnim = (shared: SharedValue<number>, delay: number) => {
       shared.value = withDelay(
         delay,
         withRepeat(

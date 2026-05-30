@@ -42,7 +42,7 @@ router.post("/companions", requireAuth, async (req, res) => {
 
 // PATCH /companions/:id
 router.patch("/companions/:id", requireAuth, async (req, res) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { relationshipLevel, messageCount, lastMessage, lastMessageAt, name, customPersonality, avatarColor, customVoice } = req.body;
   try {
     const updates: Partial<typeof companionsTable.$inferInsert> = {};
@@ -74,7 +74,7 @@ router.patch("/companions/:id", requireAuth, async (req, res) => {
 
 // DELETE /companions/:id
 router.delete("/companions/:id", requireAuth, async (req, res) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   try {
     await db
       .delete(companionsTable)
@@ -89,7 +89,7 @@ router.delete("/companions/:id", requireAuth, async (req, res) => {
 // GET /companions/:id/messages?limit=100&before=<createdAt ISO>
 // Returns messages in ascending order. Use `before` to page backwards (load older messages).
 router.get("/companions/:id/messages", requireAuth, async (req, res) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const limit = Math.min(Number(req.query.limit) || 100, 200);
   const before = req.query.before as string | undefined; // ISO timestamp cursor
   try {
@@ -127,7 +127,7 @@ router.get("/companions/:id/messages", requireAuth, async (req, res) => {
 
 // POST /companions/:id/messages
 router.post("/companions/:id/messages", requireAuth, async (req, res) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { messages } = req.body as { messages: Array<{ role: string; content: string }> };
   if (!Array.isArray(messages) || messages.length === 0) {
     res.status(400).json({ error: "messages array required" });
@@ -155,7 +155,7 @@ router.post("/companions/:id/messages", requireAuth, async (req, res) => {
 
 // DELETE /companions/:id/messages/batch
 router.delete("/companions/:id/messages/batch", requireAuth, async (req, res) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { ids } = req.body as { ids: string[] };
   if (!Array.isArray(ids) || ids.length === 0) {
     res.status(400).json({ error: "ids array required" });
@@ -182,7 +182,7 @@ router.delete("/companions/:id/messages/batch", requireAuth, async (req, res) =>
 
 // DELETE /companions/:id/messages
 router.delete("/companions/:id/messages", requireAuth, async (req, res) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   try {
     const [companion] = await db
       .select({ id: companionsTable.id })
@@ -202,7 +202,7 @@ router.delete("/companions/:id/messages", requireAuth, async (req, res) => {
 
 // GET /companions/:id/memory
 router.get("/companions/:id/memory", requireAuth, async (req, res) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   try {
     const [companion] = await db
       .select({ id: companionsTable.id })
@@ -226,7 +226,7 @@ router.get("/companions/:id/memory", requireAuth, async (req, res) => {
 
 // PUT /companions/:id/memory
 router.put("/companions/:id/memory", requireAuth, async (req, res) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { notes } = req.body as { notes: string[] };
   if (!Array.isArray(notes)) {
     res.status(400).json({ error: "notes array required" });
@@ -256,7 +256,7 @@ router.put("/companions/:id/memory", requireAuth, async (req, res) => {
 
 // POST /companions/:id/mood — upsert today's mood (1–5)
 router.post("/companions/:id/mood", requireAuth, async (req, res) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { mood } = req.body as { mood: number };
   if (typeof mood !== "number" || mood < 1 || mood > 5) {
     res.status(400).json({ error: "mood must be 1–5" });
@@ -285,7 +285,7 @@ router.post("/companions/:id/mood", requireAuth, async (req, res) => {
 
 // GET /companions/:id/mood — last 7 days of mood logs
 router.get("/companions/:id/mood", requireAuth, async (req, res) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   try {
     const [companion] = await db
       .select({ id: companionsTable.id })
