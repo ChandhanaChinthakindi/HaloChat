@@ -15,7 +15,8 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.halochat.app"
+      "bundleIdentifier": "com.halochat.app",
+      "usesAppleSignIn": true
     },
     "android": {},
     "web": {
@@ -25,6 +26,7 @@
       "expo-router",
       "expo-font",
       "expo-web-browser",
+      "expo-apple-authentication",
       [
         "expo-notifications",
         {
@@ -36,8 +38,7 @@
       "expo-secure-store"
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "typedRoutes": true
     }
   }
 }

@@ -214,7 +214,7 @@ describe("GET /api/companions/:id/messages", () => {
     queueResults([{ id: "comp-id-1" }], msgs); // ownership + messages
     const res = await request(app).get("/api/companions/comp-id-1/messages").set(AUTH_HEADER);
     expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(2);
+    expect(res.body.messages).toHaveLength(2);
   });
 });
 

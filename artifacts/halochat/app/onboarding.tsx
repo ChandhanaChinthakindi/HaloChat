@@ -86,13 +86,19 @@ export default function OnboardingScreen() {
     }, 155);
   };
 
+  const finish = async (nameValue: string) => {
+    hapticsImpact();
+    Keyboard.dismiss();
+    if (nameValue.trim()) await setUserName(nameValue.trim());
+    await setHasOnboarded(true);
+    // Go straight to companion creation so the user has something to do immediately
+    router.replace("/create");
+  };
+
   const handleNext = async () => {
     if (isNameStep) {
-      hapticsImpact();
-      Keyboard.dismiss();
-      if (name.trim()) await setUserName(name.trim());
-      await setHasOnboarded(true);
-      router.replace("/(tabs)");
+      if (!nameValid) return;
+      await finish(name);
       return;
     }
 
@@ -106,17 +112,27 @@ export default function OnboardingScreen() {
     });
   };
 
+  const handleSkipToName = () => {
+    hapticsImpact();
+    animateTransition("forward", () => {
+      setStep(SLIDES.length);
+      setTimeout(() => nameInputRef.current?.focus(), 350);
+    });
+  };
+
   const handleBack = () => {
     if (step === 0) return;
     hapticsImpact();
     animateTransition("back", () => setStep(s => s - 1));
   };
 
+  const nameValid = name.trim().length > 0;
   const buttonLabel = isNameStep
-    ? (name.trim() ? "Let's go" : "Continue")
+    ? "Let's go"
     : step === SLIDES.length - 1
     ? "Get Started"
     : "Continue";
+  const buttonDisabled = isNameStep && !nameValid;
 
   return (
     <LinearGradient
@@ -160,7 +176,17 @@ export default function OnboardingScreen() {
           ))}
         </View>
 
-        <View style={styles.sideSlot} />
+        <View style={styles.sideSlot}>
+          {!isNameStep && (
+            <Pressable
+              onPress={handleSkipToName}
+              hitSlop={12}
+              style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}
+            >
+              <Text style={[styles.skipText, { color: colors.mutedForeground }]}>Skip</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
 
       {/* Slide content */}
@@ -210,7 +236,7 @@ export default function OnboardingScreen() {
             </View>
 
             <Text style={[styles.skipHint, { color: colors.mutedForeground }]}>
-              You can skip this — tap {name.trim() ? "Let's go" : "Continue"}
+              Your companions will use this to personalise every chat
             </Text>
           </>
         ) : (
@@ -237,16 +263,17 @@ export default function OnboardingScreen() {
       {/* CTA button */}
       <Pressable
         onPress={handleNext}
-        style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
+        disabled={buttonDisabled}
+        style={({ pressed }) => [{ opacity: buttonDisabled ? 0.4 : pressed ? 0.85 : 1 }]}
       >
         <LinearGradient
-          colors={activeGradient}
+          colors={buttonDisabled ? [colors.muted, colors.muted] : activeGradient}
           style={styles.button}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
         >
-          <Text style={styles.buttonText}>{buttonLabel}</Text>
-          <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
+          <Text style={[styles.buttonText, buttonDisabled && { color: colors.mutedForeground }]}>{buttonLabel}</Text>
+          {!buttonDisabled && <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />}
         </LinearGradient>
       </Pressable>
     </LinearGradient>
@@ -275,8 +302,13 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   sideSlot: {
-    width: 32,
+    width: 40,
     alignItems: "center",
+  },
+  skipText: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    fontWeight: "500" as const,
   },
   dots: {
     flexDirection: "row",

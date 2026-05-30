@@ -1,7 +1,13 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
 import { NativeModules, Platform } from "react-native";
 import type { CompanionType } from "@/context/CompanionContext";
 import { API_BASE } from "@/context/CompanionContext";
+
+// Reads EAS projectId from app.json (added by `npx eas init`)
+const EAS_PROJECT_ID: string | undefined =
+  Constants.expoConfig?.extra?.eas?.projectId ??
+  (Constants as any).easConfig?.projectId;
 
 export const NOTIFICATIONS_PREF_KEY = "halochat_notifications_enabled";
 
@@ -162,7 +168,9 @@ export async function registerPushToken(
     if (!granted) return;
 
     const N = require("expo-notifications");
-    const tokenData = await N.getExpoPushTokenAsync();
+    const tokenData = await N.getExpoPushTokenAsync(
+      EAS_PROJECT_ID ? { projectId: EAS_PROJECT_ID } : undefined
+    );
     const token: string = tokenData.data;
     if (!token) return;
 

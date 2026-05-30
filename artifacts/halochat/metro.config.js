@@ -4,11 +4,12 @@ const fs = require("fs");
 
 const projectRoot = __dirname;
 const workspaceRoot = path.resolve(projectRoot, "../..");
+const pnpmStore = path.resolve(workspaceRoot, "node_modules/.pnpm");
 
 const config = getDefaultConfig(projectRoot);
 
-// Watch the full workspace so Metro can access files in the pnpm store
-config.watchFolders = [workspaceRoot];
+// Watch workspace + pnpm store so Metro can read files resolved via symlinks
+config.watchFolders = [workspaceRoot, pnpmStore];
 
 // Resolve packages from both node_modules locations
 config.resolver.nodeModulesPaths = [
@@ -17,7 +18,13 @@ config.resolver.nodeModulesPaths = [
 ];
 
 // Resolve pnpm symlinks to their real paths so Metro doesn't need to follow symlinks
-const pnpmPackages = ["expo-notifications", "expo-secure-store", "expo-auth-session", "expo-web-browser"];
+const pnpmPackages = [
+  "expo-notifications",
+  "expo-secure-store",
+  "expo-auth-session",
+  "expo-web-browser",
+  "expo-apple-authentication",
+];
 config.resolver.extraNodeModules = pnpmPackages.reduce((acc, pkg) => {
   const symlink = path.resolve(projectRoot, "node_modules", pkg);
   try {

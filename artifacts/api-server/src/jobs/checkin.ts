@@ -49,7 +49,15 @@ async function generateCheckinMessage(
   }
 }
 
+let isRunning = false;
+
 async function runCheckins() {
+  if (isRunning) {
+    logger.warn("Check-in job already running, skipping");
+    return;
+  }
+  isRunning = true;
+
   const now = new Date();
   const inactiveAfter = new Date(now.getTime() - INACTIVITY_HOURS * 60 * 60 * 1000);
   const inactiveBefore = new Date(now.getTime() - MAX_INACTIVITY_HOURS * 60 * 60 * 1000);
@@ -86,6 +94,12 @@ async function runCheckins() {
       const lastMessages = c.lastMessage ? [c.lastMessage] : undefined;
       const message = await generateCheckinMessage(c.companionName, c.companionType, lastMessages);
 
+      // Mark sent BEFORE pushing — at-most-once: if push fails we won't retry, but we won't double-send
+      await db
+        .update(companionsTable)
+        .set({ lastCheckinSentAt: now })
+        .where(eq(companionsTable.id, c.companionId));
+
       await sendPushNotification(
         c.pushToken,
         c.companionName,
@@ -93,15 +107,12 @@ async function runCheckins() {
         { companionId: c.companionId, screen: "chat" }
       );
 
-      await db
-        .update(companionsTable)
-        .set({ lastCheckinSentAt: now })
-        .where(eq(companionsTable.id, c.companionId));
-
       logger.info({ companionId: c.companionId, companionName: c.companionName }, "Check-in sent");
     }
   } catch (err) {
     logger.error({ err }, "Check-in job error");
+  } finally {
+    isRunning = false;
   }
 }
 

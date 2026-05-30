@@ -59,6 +59,7 @@ interface AuthContextType {
   accessToken: string | null;
   login: (identifier: string, password: string) => Promise<void>;
   signup: (email: string, password: string, name: string, username: string, gender: string, dateOfBirth: string) => Promise<void>;
+  appleSignIn: (identityToken: string, fullName?: string) => Promise<void>;
   logout: () => Promise<void>;
   deleteAccount: () => Promise<void>;
   updateUserName: (name: string) => void;
@@ -167,6 +168,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await storeSession(data.accessToken, data.refreshToken, data.user);
   };
 
+  const appleSignIn = async (identityToken: string, fullName?: string) => {
+    const res = await fetch(`${API_BASE}/auth/apple`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identityToken, fullName }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Apple Sign In failed");
+    await storeSession(data.accessToken, data.refreshToken, data.user);
+  };
+
   const logout = async () => { await clearSession(); };
 
   const deleteAccount = async () => {
@@ -184,7 +196,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user, isAuthLoading, isAuthenticated: !!user && !!accessToken,
-      accessToken, login, signup,
+      accessToken, login, signup, appleSignIn,
       logout, deleteAccount, updateUserName, authFetch,
     }}>
       {children}

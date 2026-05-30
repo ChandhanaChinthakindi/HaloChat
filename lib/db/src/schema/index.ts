@@ -15,6 +15,7 @@ export const usersTable = pgTable("users", {
   pushToken: text("push_token"),
   resetTokenHash: text("reset_token_hash"),
   resetTokenExpiry: timestamp("reset_token_expiry"),
+  refreshTokenVersion: integer("refresh_token_version").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

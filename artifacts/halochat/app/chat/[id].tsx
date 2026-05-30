@@ -180,7 +180,7 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (!id || !companion) return;
-    getMessages(id).then((msgs) => {
+    getMessages(id).then(({ messages: msgs }) => {
       initialMessageIdsRef.current = new Set(msgs.map((m) => m.id));
       setMessages(msgs);
       setIsLoaded(true);
@@ -960,6 +960,9 @@ export default function ChatScreen() {
           showsVerticalScrollIndicator={false}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
+          windowSize={10}
+          maxToRenderPerBatch={20}
+          initialNumToRender={20}
           renderItem={({ item }) => {
             if ((item as any).kind === "separator") {
               return (

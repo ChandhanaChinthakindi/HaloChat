@@ -16,7 +16,7 @@ const ThemeContext = createContext<ThemeContextType>({
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [themePreference, setThemePreferenceState] = useState<ThemePreference>("system");
+  const [themePreference, setThemePreferenceState] = useState<ThemePreference>("light");
 
   useEffect(() => {
     AsyncStorage.getItem(THEME_KEY)

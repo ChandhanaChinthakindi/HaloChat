@@ -101,8 +101,7 @@ function clearQueue() {
 
 const VALID_SIGNUP = {
   email: "test@example.com",
-  password: "password123",
-  name: "Test User",
+  password: "Password123!",
   username: "testuser",
   gender: "female",
   dateOfBirth: "1998-06-15", // age ~27
@@ -139,12 +138,6 @@ describe("POST /api/auth/signup", () => {
     const res = await request(app).post("/api/auth/signup").send({ ...VALID_SIGNUP, password: "short" });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/8/);
-  });
-
-  it("returns 400 when name is missing", async () => {
-    const res = await request(app).post("/api/auth/signup").send({ ...VALID_SIGNUP, name: undefined });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/name/i);
   });
 
   it("returns 400 when username is missing", async () => {

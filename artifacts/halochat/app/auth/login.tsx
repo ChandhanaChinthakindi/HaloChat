@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as AppleAuthentication from "expo-apple-authentication";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React, { useRef, useState } from "react";
@@ -12,6 +13,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -22,7 +24,8 @@ import { useColors } from "@/hooks/useColors";
 export default function LoginScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { login } = useAuth();
+  const colorScheme = useColorScheme();
+  const { login, appleSignIn } = useAuth();
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -31,6 +34,26 @@ export default function LoginScreen() {
   const passwordRef = useRef<TextInput>(null);
 
   const canSubmit = identifier.trim().length > 0 && password.length >= 1;
+
+  const handleAppleSignIn = async () => {
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      const fullName = credential.fullName
+        ? [credential.fullName.givenName, credential.fullName.familyName].filter(Boolean).join(" ") || undefined
+        : undefined;
+      await appleSignIn(credential.identityToken!, fullName);
+      router.replace("/");
+    } catch (e: any) {
+      if (e?.code !== "ERR_REQUEST_CANCELED") {
+        Alert.alert("Apple Sign In Failed", e.message || "Please try again.");
+      }
+    }
+  };
 
   const handleLogin = async () => {
     if (!canSubmit || isLoading) return;
@@ -145,6 +168,27 @@ export default function LoginScreen() {
                 <Text style={{ color: colors.primary }}>Reset it</Text>
               </Text>
             </Pressable>
+
+            {Platform.OS === "ios" && (
+              <>
+                <View style={styles.divider}>
+                  <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+                  <Text style={[styles.dividerLabel, { color: colors.mutedForeground }]}>or</Text>
+                  <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+                </View>
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                  buttonStyle={
+                    colorScheme === "dark"
+                      ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                      : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+                  }
+                  cornerRadius={16}
+                  style={styles.appleButton}
+                  onPress={handleAppleSignIn}
+                />
+              </>
+            )}
           </View>
 
           {/* Footer */}
@@ -210,4 +254,8 @@ const styles = StyleSheet.create({
   footerLink: { fontSize: 14, fontFamily: "Inter_600SemiBold", fontWeight: "600" as const },
   forgotLink: { alignSelf: "center", marginTop: 2 },
   forgotText: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center" },
+  divider: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 4 },
+  dividerLine: { flex: 1, height: StyleSheet.hairlineWidth },
+  dividerLabel: { fontSize: 13, fontFamily: "Inter_400Regular" },
+  appleButton: { height: 52, width: "100%" },
 });

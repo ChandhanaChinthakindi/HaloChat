@@ -371,11 +371,11 @@ export default function SettingsScreen() {
         <SettingRow
           icon="shield-checkmark-outline"
           label="Privacy"
-          subtitle="Conversations stored locally on your device"
+          subtitle="Your data is stored securely on our servers"
           onPress={() =>
             Alert.alert(
               "Privacy",
-              "Your conversations are stored locally on your device. Messages are sent to the AI server only to generate responses and are not stored or logged.",
+              "Your conversations and companion data are stored securely on our servers and are only accessible to your account. Messages are sent to OpenAI to generate responses and are subject to OpenAI's privacy policy.",
               [{ text: "OK" }]
             )
           }

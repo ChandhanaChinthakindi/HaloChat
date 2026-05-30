@@ -92,7 +92,10 @@ export default function CreateScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: topPadding + 8, borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => router.back()} style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}>
+        <Pressable
+          onPress={() => router.canGoBack() ? router.back() : router.replace("/(tabs)")}
+          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+        >
           <Ionicons name="chevron-back" size={24} color={colors.foreground} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>New Companion</Text>
@@ -182,6 +185,8 @@ export default function CreateScreen() {
                 numberOfLines={3}
                 maxLength={500}
                 textAlignVertical="top"
+                returnKeyType="done"
+                blurOnSubmit
               />
             </View>
             {customPersonality.length > 0 && (
@@ -279,6 +284,8 @@ export default function CreateScreen() {
                 numberOfLines={4}
                 maxLength={500}
                 textAlignVertical="top"
+                returnKeyType="done"
+                blurOnSubmit
               />
             </View>
             <Text style={[styles.charCount, { color: colors.mutedForeground }]}>{customPersonality.length}/500</Text>

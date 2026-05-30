@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq, desc, and, inArray } from "drizzle-orm";
+import { eq, desc, and, inArray, lt, asc } from "drizzle-orm";
 import { db, companionsTable, messagesTable, memoryNotesTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { requireAuth } from "../middleware/auth";
@@ -85,12 +85,13 @@ router.delete("/companions/:id", requireAuth, async (req, res) => {
   }
 });
 
-// GET /companions/:id/messages
+// GET /companions/:id/messages?limit=100&before=<createdAt ISO>
+// Returns messages in ascending order. Use `before` to page backwards (load older messages).
 router.get("/companions/:id/messages", requireAuth, async (req, res) => {
   const { id } = req.params;
-  const limit = Math.min(Number(req.query.limit) || 100, 500);
+  const limit = Math.min(Number(req.query.limit) || 100, 200);
+  const before = req.query.before as string | undefined; // ISO timestamp cursor
   try {
-    // Verify ownership
     const [companion] = await db
       .select({ id: companionsTable.id })
       .from(companionsTable)
@@ -99,13 +100,24 @@ router.get("/companions/:id/messages", requireAuth, async (req, res) => {
       res.status(404).json({ error: "Companion not found" });
       return;
     }
-    const messages = await db
+
+    const conditions = before
+      ? and(eq(messagesTable.companionId, id), lt(messagesTable.createdAt, new Date(before)))
+      : eq(messagesTable.companionId, id);
+
+    // Fetch newest-first when paginating, then reverse for chronological display
+    const rows = await db
       .select()
       .from(messagesTable)
-      .where(eq(messagesTable.companionId, id))
-      .orderBy(messagesTable.createdAt)
+      .where(conditions)
+      .orderBy(desc(messagesTable.createdAt))
       .limit(limit);
-    res.json(messages);
+
+    res.json({
+      messages: rows.reverse(),
+      hasMore: rows.length === limit,
+      nextCursor: rows.length > 0 ? rows[0].createdAt.toISOString() : null,
+    });
   } catch (err) {
     logger.error({ err }, "Database error");
     res.status(500).json({ error: "Internal server error" });

@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { calcAge } from "@/utils/chatUtils";
+import { API_BASE } from "@/utils/api";
 
 const GENDER_OPTIONS = [
   { value: "female" as const, label: "Female", icon: "♀" },
@@ -31,7 +32,6 @@ export default function SignupScreen() {
   const insets = useSafeAreaInsets();
   const { signup } = useAuth();
 
-  const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -42,6 +42,9 @@ export default function SignupScreen() {
   const [dobMonth, setDobMonth] = useState("");
   const [dobYear, setDobYear] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
+  const [usernameChecking, setUsernameChecking] = useState(false);
 
   const usernameRef = useRef<TextInput>(null);
   const emailRef = useRef<TextInput>(null);
@@ -55,6 +58,28 @@ export default function SignupScreen() {
       ? "3–20 chars: letters, numbers, _ or -"
       : null;
 
+  useEffect(() => {
+    if (username.length < 3 || usernameError) {
+      setUsernameAvailable(null);
+      setUsernameChecking(false);
+      return;
+    }
+    setUsernameChecking(true);
+    setUsernameAvailable(null);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/auth/check-username?username=${encodeURIComponent(username)}`);
+        const data = await res.json();
+        setUsernameAvailable(data.available === true);
+      } catch {
+        setUsernameAvailable(null);
+      } finally {
+        setUsernameChecking(false);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [username, usernameError]);
+
   const dobFull =
     dobDay.length === 2 && dobMonth.length === 2 && dobYear.length === 4
       ? `${dobYear}-${dobMonth.padStart(2, "0")}-${dobDay.padStart(2, "0")}`
@@ -65,12 +90,21 @@ export default function SignupScreen() {
   const isValidAge = userAge !== null && userAge >= 17;
   const showAgeError = isDobValid && userAge !== null && userAge < 17;
 
+  const pwRules = [
+    { key: "len",     label: "At least 8 characters",      ok: password.length >= 8 },
+    { key: "upper",   label: "One uppercase letter",        ok: /[A-Z]/.test(password) },
+    { key: "lower",   label: "One lowercase letter",        ok: /[a-z]/.test(password) },
+    { key: "num",     label: "One number",                  ok: /[0-9]/.test(password) },
+    { key: "special", label: "One special character",       ok: /[^A-Za-z0-9]/.test(password) },
+  ];
+  const pwAllValid = password.length > 0 && pwRules.every((r) => r.ok);
+
   const canSubmit =
-    name.trim().length > 0 &&
     username.trim().length >= 3 &&
     !usernameError &&
+    usernameAvailable === true &&
     email.trim().length > 0 &&
-    password.length >= 8 &&
+    pwAllValid &&
     password === confirmPassword &&
     gender !== null &&
     isValidAge;
@@ -80,7 +114,7 @@ export default function SignupScreen() {
     setIsLoading(true);
     try {
       const dateOfBirth = `${dobYear}-${dobMonth.padStart(2, "0")}-${dobDay.padStart(2, "0")}`;
-      await signup(email.trim(), password, name.trim(), username.trim().toLowerCase(), gender!, dateOfBirth);
+      await signup(email.trim(), password, "", username.trim().toLowerCase(), gender!, dateOfBirth);
       router.replace("/");
     } catch (e: any) {
       Alert.alert("Sign Up Failed", e.message || "Please try again.");
@@ -89,8 +123,6 @@ export default function SignupScreen() {
     }
   };
 
-  const passwordStrength = password.length === 0 ? null : password.length < 8 ? "weak" : password.length < 12 ? "good" : "strong";
-  const strengthColor = passwordStrength === "weak" ? "#EF4444" : passwordStrength === "good" ? "#F59E0B" : "#22C55E";
 
   return (
     <LinearGradient
@@ -133,24 +165,18 @@ export default function SignupScreen() {
 
           {/* Form */}
           <View style={styles.form}>
-            <View style={[styles.inputRow, { backgroundColor: colors.card, borderColor: name ? "#818263" : colors.border }]}>
-              <Ionicons name="person-outline" size={18} color={colors.mutedForeground} style={styles.inputIcon} />
-              <TextInput
-                style={[styles.input, { color: colors.foreground }]}
-                placeholder="Your name"
-                placeholderTextColor={colors.mutedForeground}
-                value={name}
-                onChangeText={setName}
-                autoCapitalize="words"
-                returnKeyType="next"
-                onSubmitEditing={() => usernameRef.current?.focus()}
-              />
-            </View>
-
             <View>
               <View style={[styles.inputRow, {
                 backgroundColor: colors.card,
-                borderColor: username ? (usernameError ? "#EF4444" : "#818263") : colors.border,
+                borderColor: username
+                  ? usernameError
+                    ? "#EF4444"
+                    : usernameAvailable === false
+                    ? "#EF4444"
+                    : usernameAvailable === true
+                    ? "#22C55E"
+                    : "#818263"
+                  : colors.border,
               }]}>
                 <Text style={[styles.atSign, { color: colors.mutedForeground }]}>@</Text>
                 <TextInput
@@ -162,16 +188,25 @@ export default function SignupScreen() {
                   onChangeText={(t) => setUsername(t.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  autoFocus
                   returnKeyType="next"
                   onSubmitEditing={() => emailRef.current?.focus()}
                 />
-                {username.length >= 3 && !usernameError && (
+                {usernameChecking && <ActivityIndicator size="small" color={colors.mutedForeground} />}
+                {!usernameChecking && usernameAvailable === true && (
                   <Ionicons name="checkmark-circle" size={18} color="#22C55E" />
                 )}
+                {!usernameChecking && usernameAvailable === false && (
+                  <Ionicons name="close-circle" size={18} color="#EF4444" />
+                )}
               </View>
-              {usernameError && (
+              {usernameError ? (
                 <Text style={[styles.fieldError, { color: "#EF4444" }]}>{usernameError}</Text>
-              )}
+              ) : usernameAvailable === false ? (
+                <Text style={[styles.fieldError, { color: "#EF4444" }]}>That username is already taken</Text>
+              ) : usernameAvailable === true ? (
+                <Text style={[styles.fieldError, { color: "#22C55E" }]}>Username available</Text>
+              ) : null}
             </View>
 
             <View style={[styles.inputRow, { backgroundColor: colors.card, borderColor: email ? "#818263" : colors.border }]}>
@@ -197,7 +232,7 @@ export default function SignupScreen() {
                 <TextInput
                   ref={passwordRef}
                   style={[styles.input, { color: colors.foreground }]}
-                  placeholder="Password (min. 8 characters)"
+                  placeholder="Password"
                   placeholderTextColor={colors.mutedForeground}
                   value={password}
                   onChangeText={setPassword}
@@ -213,25 +248,20 @@ export default function SignupScreen() {
                   />
                 </Pressable>
               </View>
-              {passwordStrength && (
-                <View style={styles.strengthRow}>
-                  {["weak", "good", "strong"].map((s, i) => (
-                    <View
-                      key={s}
-                      style={[
-                        styles.strengthBar,
-                        {
-                          backgroundColor:
-                            (passwordStrength === "weak" && i === 0) ||
-                            (passwordStrength === "good" && i <= 1) ||
-                            passwordStrength === "strong"
-                              ? strengthColor
-                              : colors.border,
-                        },
-                      ]}
-                    />
+              {password.length > 0 && (
+                <View style={styles.pwChecklist}>
+                  {pwRules.map((rule) => (
+                    <View key={rule.key} style={styles.pwRuleRow}>
+                      <Ionicons
+                        name={rule.ok ? "checkmark-circle" : "ellipse-outline"}
+                        size={14}
+                        color={rule.ok ? "#22C55E" : colors.mutedForeground}
+                      />
+                      <Text style={[styles.pwRuleText, { color: rule.ok ? "#22C55E" : colors.mutedForeground }]}>
+                        {rule.label}
+                      </Text>
+                    </View>
                   ))}
-                  <Text style={[styles.strengthLabel, { color: strengthColor }]}>{passwordStrength}</Text>
                 </View>
               )}
             </View>
@@ -420,9 +450,9 @@ const styles = StyleSheet.create({
   atSign: { fontSize: 16, fontFamily: "Inter_400Regular", marginRight: -4 },
   eyeBtn: { padding: 2 },
   fieldError: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 4, paddingHorizontal: 4 },
-  strengthRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6, paddingHorizontal: 4 },
-  strengthBar: { flex: 1, height: 3, borderRadius: 2 },
-  strengthLabel: { fontSize: 11, fontFamily: "Inter_500Medium", fontWeight: "500" as const },
+  pwChecklist: { gap: 5, marginTop: 8, paddingHorizontal: 4 },
+  pwRuleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  pwRuleText: { fontSize: 12, fontFamily: "Inter_400Regular" },
   fieldGroup: { gap: 8 },
   fieldLabel: { fontSize: 13, fontFamily: "Inter_500Medium", fontWeight: "500" as const, paddingHorizontal: 4 },
   genderRow: { flexDirection: "row", gap: 8 },

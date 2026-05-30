@@ -2,12 +2,50 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
-import { eq, or, ilike } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { sendPasswordResetEmail } from "../lib/email";
 import { requireAuth, JWT_SECRET, JWT_REFRESH_SECRET } from "../middleware/auth";
 import { authLimiter, refreshLimiter } from "../middleware/rateLimits";
+
+// ── Apple JWKS verification ──────────────────────────────────────────────────
+
+const APPLE_ISSUER = "https://appleid.apple.com";
+const APPLE_BUNDLE_ID = process.env["APPLE_BUNDLE_ID"] ?? "com.halochat.app";
+const APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys";
+
+interface AppleJWK { kid: string; kty: string; n: string; e: string; [k: string]: unknown }
+let _appleKeysCache: { keys: AppleJWK[]; fetchedAt: number } | null = null;
+
+async function getApplePublicKey(kid: string): Promise<string> {
+  const now = Date.now();
+  if (!_appleKeysCache || now - _appleKeysCache.fetchedAt > 60 * 60 * 1000) {
+    const res = await fetch(APPLE_JWKS_URL);
+    if (!res.ok) throw new Error("Failed to fetch Apple JWKS");
+    const { keys } = await res.json() as { keys: AppleJWK[] };
+    _appleKeysCache = { keys, fetchedAt: now };
+  }
+  const jwk = _appleKeysCache.keys.find((k) => k.kid === kid);
+  if (!jwk) throw new Error(`Apple public key not found for kid: ${kid}`);
+  const pubKey = crypto.createPublicKey({ key: jwk as any, format: "jwk" });
+  return pubKey.export({ type: "spki", format: "pem" }) as string;
+}
+
+async function verifyAppleToken(identityToken: string): Promise<{ sub: string; email?: string }> {
+  const decoded = jwt.decode(identityToken, { complete: true });
+  if (!decoded || typeof decoded === "string" || !decoded.header.kid) {
+    throw new Error("Malformed Apple identity token");
+  }
+  const pem = await getApplePublicKey(decoded.header.kid);
+  const payload = jwt.verify(identityToken, pem, {
+    algorithms: ["RS256"],
+    issuer: APPLE_ISSUER,
+    audience: APPLE_BUNDLE_ID,
+  }) as { sub?: string; email?: string };
+  if (!payload.sub) throw new Error("Missing sub in Apple token");
+  return { sub: payload.sub, email: payload.email?.toLowerCase() };
+}
 
 const APP_SCHEME = process.env["APP_SCHEME"] ?? "halochat";
 
@@ -17,11 +55,20 @@ function signAccessToken(userId: string): string {
   return jwt.sign({ sub: userId }, JWT_SECRET, { expiresIn: "15m" });
 }
 
-function signRefreshToken(userId: string): string {
-  return jwt.sign({ sub: userId }, JWT_REFRESH_SECRET, { expiresIn: "30d" });
+function signRefreshToken(userId: string, version: number): string {
+  return jwt.sign({ sub: userId, rtv: version }, JWT_REFRESH_SECRET, { expiresIn: "30d" });
 }
 
 const USERNAME_RE = /^[a-z0-9_-]{3,20}$/;
+
+function validatePassword(password: string): string | null {
+  if (password.length < 8) return "Password must be at least 8 characters";
+  if (!/[A-Z]/.test(password)) return "Password must contain at least one uppercase letter";
+  if (!/[a-z]/.test(password)) return "Password must contain at least one lowercase letter";
+  if (!/[0-9]/.test(password)) return "Password must contain at least one number";
+  if (!/[^A-Za-z0-9]/.test(password)) return "Password must contain at least one special character";
+  return null;
+}
 
 function userPayload(user: typeof usersTable.$inferSelect) {
   return {
@@ -54,16 +101,13 @@ router.post("/auth/signup", authLimiter, async (req, res) => {
     res.status(400).json({ error: "Email and password are required" });
     return;
   }
-  if (!name?.trim()) {
-    res.status(400).json({ error: "Name is required" });
-    return;
-  }
   if (!username?.trim()) {
     res.status(400).json({ error: "Username is required" });
     return;
   }
-  if (password.length < 8) {
-    res.status(400).json({ error: "Password must be at least 8 characters" });
+  const pwError = validatePassword(password);
+  if (pwError) {
+    res.status(400).json({ error: pwError });
     return;
   }
   if (!gender?.trim()) {
@@ -108,20 +152,39 @@ router.post("/auth/signup", authLimiter, async (req, res) => {
       return;
     }
 
-    const passwordHash = await bcrypt.hash(password, 12);
+    const passwordHash = await bcrypt.hash(password, 14);
     const [user] = await db
       .insert(usersTable)
-      .values({ email: emailLower, passwordHash, name: name.trim(), username: usernameLower, gender: gender.trim(), dateOfBirth })
+      .values({ email: emailLower, passwordHash, name: name?.trim() ?? "", username: usernameLower, gender: gender.trim(), dateOfBirth })
       .returning();
 
     res.status(201).json({
       user: userPayload(user),
       accessToken: signAccessToken(user.id),
-      refreshToken: signRefreshToken(user.id),
+      refreshToken: signRefreshToken(user.id, user.refreshTokenVersion ?? 0),
     });
   } catch (err) {
     logger.error({ err }, "Signup error");
     res.status(500).json({ error: "Failed to create account" });
+  }
+});
+
+// GET /auth/check-username?username=xxx
+router.get("/auth/check-username", async (req, res) => {
+  const username = (req.query.username as string | undefined)?.trim().toLowerCase();
+  if (!username || !USERNAME_RE.test(username)) {
+    res.status(400).json({ error: "Invalid username" });
+    return;
+  }
+  try {
+    const [existing] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.username, username));
+    res.json({ available: !existing });
+  } catch (err) {
+    logger.error({ err }, "Check username error");
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -156,7 +219,7 @@ router.post("/auth/login", authLimiter, async (req, res) => {
     res.json({
       user: userPayload(user),
       accessToken: signAccessToken(user.id),
-      refreshToken: signRefreshToken(user.id),
+      refreshToken: signRefreshToken(user.id, user.refreshTokenVersion ?? 0),
     });
   } catch (err) {
     logger.error({ err }, "Login error");
@@ -174,16 +237,7 @@ router.post("/auth/apple", async (req, res) => {
   }
 
   try {
-    // Decode the Apple-signed JWT to extract the stable user identifier (sub)
-    // Apple signs this with RS256; for full verification use Apple's JWKS endpoint
-    const decoded = jwt.decode(identityToken) as { sub?: string; email?: string } | null;
-    if (!decoded?.sub) {
-      res.status(400).json({ error: "Invalid Apple identity token" });
-      return;
-    }
-
-    const appleId = decoded.sub;
-    const email = decoded.email?.toLowerCase();
+    const { sub: appleId, email } = await verifyAppleToken(identityToken);
 
     // Find existing Apple user
     let [user] = await db.select().from(usersTable).where(eq(usersTable.appleId, appleId));
@@ -212,11 +266,12 @@ router.post("/auth/apple", async (req, res) => {
     res.json({
       user: userPayload(user),
       accessToken: signAccessToken(user.id),
-      refreshToken: signRefreshToken(user.id),
+      refreshToken: signRefreshToken(user.id, user.refreshTokenVersion ?? 0),
     });
-  } catch (err) {
+  } catch (err: any) {
+    const isTokenError = err?.message?.includes("jwt") || err?.message?.includes("token") || err?.message?.includes("Apple");
     logger.error({ err }, "Apple auth error");
-    res.status(500).json({ error: "Authentication failed" });
+    res.status(isTokenError ? 401 : 500).json({ error: isTokenError ? "Invalid Apple identity token" : "Authentication failed" });
   }
 });
 
@@ -262,7 +317,7 @@ router.post("/auth/google", async (req, res) => {
     res.json({
       user: userPayload(user),
       accessToken: signAccessToken(user.id),
-      refreshToken: signRefreshToken(user.id),
+      refreshToken: signRefreshToken(user.id, user.refreshTokenVersion ?? 0),
     });
   } catch (err) {
     logger.error({ err }, "Google auth error");
@@ -312,8 +367,9 @@ router.post("/auth/reset-password", authLimiter, async (req, res) => {
     res.status(400).json({ error: "Token and password are required" });
     return;
   }
-  if (password.length < 8) {
-    res.status(400).json({ error: "Password must be at least 8 characters" });
+  const pwError2 = validatePassword(password);
+  if (pwError2) {
+    res.status(400).json({ error: pwError2 });
     return;
   }
 
@@ -327,7 +383,7 @@ router.post("/auth/reset-password", authLimiter, async (req, res) => {
       return;
     }
 
-    const passwordHash = await bcrypt.hash(password, 12);
+    const passwordHash = await bcrypt.hash(password, 14);
     await db.update(usersTable)
       .set({ passwordHash, resetTokenHash: null, resetTokenExpiry: null })
       .where(eq(usersTable.id, user.id));
@@ -339,7 +395,7 @@ router.post("/auth/reset-password", authLimiter, async (req, res) => {
   }
 });
 
-// POST /auth/refresh — rotate both tokens
+// POST /auth/refresh — validate version, rotate both tokens
 router.post("/auth/refresh", refreshLimiter, async (req, res) => {
   const { refreshToken } = req.body as { refreshToken?: string };
 
@@ -349,15 +405,31 @@ router.post("/auth/refresh", refreshLimiter, async (req, res) => {
   }
 
   try {
-    const payload = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as { sub: string };
-    const [user] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.id, payload.sub));
+    const payload = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as { sub: string; rtv?: number };
+    const [user] = await db
+      .select({ id: usersTable.id, refreshTokenVersion: usersTable.refreshTokenVersion })
+      .from(usersTable)
+      .where(eq(usersTable.id, payload.sub));
+
     if (!user) {
       res.status(401).json({ error: "User not found" });
       return;
     }
+
+    // Reject if version doesn't match — token was already rotated or is stale
+    const tokenVersion = payload.rtv ?? 0;
+    if (tokenVersion !== (user.refreshTokenVersion ?? 0)) {
+      res.status(401).json({ error: "Refresh token already used" });
+      return;
+    }
+
+    // Increment version so this token can never be used again
+    const newVersion = (user.refreshTokenVersion ?? 0) + 1;
+    await db.update(usersTable).set({ refreshTokenVersion: newVersion }).where(eq(usersTable.id, user.id));
+
     res.json({
       accessToken: signAccessToken(user.id),
-      refreshToken: signRefreshToken(user.id),
+      refreshToken: signRefreshToken(user.id, newVersion),
     });
   } catch {
     res.status(401).json({ error: "Invalid or expired refresh token" });

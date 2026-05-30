@@ -176,6 +176,7 @@ export default function CallScreen() {
   const outerRingOpacity = useSharedValue(0.3);
   const innerRingScale = useSharedValue(1);
   const micBtnScale = useSharedValue(1);
+  const connectingPulse = useSharedValue(1);
 
   const outerRingStyle = useAnimatedStyle(() => ({
     transform: [{ scale: outerRingScale.value }],
@@ -187,6 +188,10 @@ export default function CallScreen() {
   }));
   const micBtnStyle = useAnimatedStyle(() => ({
     transform: [{ scale: micBtnScale.value }],
+  }));
+  const connectingStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: connectingPulse.value }],
+    opacity: connectingPulse.value,
   }));
 
   useEffect(() => {
@@ -211,6 +216,15 @@ export default function CallScreen() {
       );
     } else {
       innerRingScale.value = withTiming(1);
+    }
+
+    if (phase === "connecting" || phase === "thinking") {
+      connectingPulse.value = withRepeat(
+        withSequence(withTiming(0.6, { duration: 700 }), withTiming(1, { duration: 700 })),
+        -1, false
+      );
+    } else {
+      connectingPulse.value = withTiming(1, { duration: 200 });
     }
   }, [phase]);
 
@@ -733,6 +747,7 @@ export default function CallScreen() {
   );
 
   const endCall = useCallback(async () => {
+    isAliveRef.current = false;
     if (timerRef.current) clearInterval(timerRef.current);
     isStoppingRef.current = true;
     clearSilenceTimer();
@@ -836,14 +851,16 @@ export default function CallScreen() {
             innerRingStyle,
           ]}
         />
-        <LinearGradient
-          colors={companion.avatarGradient}
-          style={styles.avatar}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <Text style={styles.avatarInitials}>{initials}</Text>
-        </LinearGradient>
+        <Animated.View style={(phase === "connecting" || phase === "thinking") ? connectingStyle : undefined}>
+          <LinearGradient
+            colors={companion.avatarGradient}
+            style={styles.avatar}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Text style={styles.avatarInitials}>{initials}</Text>
+          </LinearGradient>
+        </Animated.View>
       </View>
 
       {/* Companion info */}

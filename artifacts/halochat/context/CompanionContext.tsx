@@ -211,7 +211,7 @@ interface CompanionContextType {
   updateCompanion: (id: string, patch: { name?: string; customPersonality?: string }) => Promise<void>;
   togglePin: (id: string) => Promise<void>;
   deleteCompanion: (id: string) => Promise<void>;
-  getMessages: (companionId: string) => Promise<Message[]>;
+  getMessages: (companionId: string, before?: string) => Promise<{ messages: Message[]; hasMore: boolean; nextCursor: string | null }>;
   addMessage: (companionId: string, message: Message) => Promise<string | null>;
   deleteMessages: (companionId: string, messageIds: string[]) => Promise<void>;
   updateRelationshipLevel: (companionId: string, delta: number) => Promise<void>;
@@ -219,6 +219,8 @@ interface CompanionContextType {
   removeMemoryNote: (companionId: string, index: number) => Promise<void>;
   clearMessages: (companionId: string) => Promise<void>;
   isLoaded: boolean;
+  loadError: boolean;
+  retryLoad: () => void;
 }
 
 const CompanionContext = createContext<CompanionContextType | null>(null);
@@ -232,12 +234,21 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   const [hasOnboarded, setHasOnboardedState] = useState(false);
   const [userName, setUserNameState] = useState("");
   const [isLoaded, setIsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [loadTrigger, setLoadTrigger] = useState(0);
+
+  const retryLoad = useCallback(() => {
+    setIsLoaded(false);
+    setLoadError(false);
+    setLoadTrigger((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     if (isAuthLoading) return;
 
     if (!isAuthenticated) {
       setCompanions([]);
+      setLoadError(false);
       setIsLoaded(true);
       return;
     }
@@ -271,15 +282,16 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
           })
         );
         setCompanions(withMemory);
+        setLoadError(false);
       } catch {
-        // server unavailable — start with empty state
+        setLoadError(true);
       } finally {
         setIsLoaded(true);
       }
     };
     setIsLoaded(false);
     load();
-  }, [isAuthenticated, isAuthLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, isAuthLoading, loadTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setHasOnboarded = useCallback(async (value: boolean) => {
     setHasOnboardedState(value);
@@ -346,14 +358,23 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     setCompanions((prev) => prev.filter((c) => c.id !== id));
   }, []);
 
-  const getMessages = useCallback(async (companionId: string): Promise<Message[]> => {
+  const getMessages = useCallback(async (companionId: string, before?: string): Promise<{ messages: Message[]; hasMore: boolean; nextCursor: string | null }> => {
     try {
-      const res = await authFetchRef.current(`${API_BASE}/companions/${companionId}/messages?limit=200`);
-      if (!res.ok) return [];
-      const raw: any[] = await res.json();
-      return raw.map(dbToMessage);
+      const url = before
+        ? `${API_BASE}/companions/${companionId}/messages?limit=100&before=${encodeURIComponent(before)}`
+        : `${API_BASE}/companions/${companionId}/messages?limit=100`;
+      const res = await authFetchRef.current(url);
+      if (!res.ok) return { messages: [], hasMore: false, nextCursor: null };
+      const data = await res.json();
+      // Handle both old array format and new paginated format
+      if (Array.isArray(data)) return { messages: data.map(dbToMessage), hasMore: false, nextCursor: null };
+      return {
+        messages: (data.messages ?? []).map(dbToMessage),
+        hasMore: data.hasMore ?? false,
+        nextCursor: data.nextCursor ?? null,
+      };
     } catch {
-      return [];
+      return { messages: [], hasMore: false, nextCursor: null };
     }
   }, []);
 
@@ -451,38 +472,73 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addMemoryNote = useCallback(async (companionId: string, note: string) => {
-    setCompanions((prev) => {
-      const updated = prev.map((c) => {
+    const trimmed = note.trim();
+    let prevNotes: string[] | null = null;
+    let newNotes: string[] | null = null;
+
+    setCompanions((prev) =>
+      prev.map((c) => {
         if (c.id !== companionId) return c;
-        const trimmed = note.trim();
         if (c.memoryNotes.includes(trimmed)) return c;
-        const newNotes = [...c.memoryNotes.slice(-19), trimmed];
-        authFetchRef.current(`${API_BASE}/companions/${companionId}/memory`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ notes: newNotes }),
-        }).catch(() => {});
+        prevNotes = c.memoryNotes;
+        newNotes = [...c.memoryNotes.slice(-19), trimmed];
         return { ...c, memoryNotes: newNotes };
+      })
+    );
+
+    if (!newNotes) return; // duplicate note, nothing to do
+
+    try {
+      const res = await authFetchRef.current(`${API_BASE}/companions/${companionId}/memory`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: newNotes }),
       });
-      return updated;
-    });
+      if (!res.ok) throw new Error("Failed to save memory note");
+    } catch (err) {
+      // Rollback optimistic update
+      if (prevNotes !== null) {
+        setCompanions((prev) =>
+          prev.map((c) => (c.id === companionId ? { ...c, memoryNotes: prevNotes! } : c))
+        );
+      }
+      throw err;
+    }
   }, []);
 
   const removeMemoryNote = useCallback(async (companionId: string, index: number) => {
-    setCompanions((prev) => {
-      const updated = prev.map((c) => {
+    let prevNotes: string[] | null = null;
+    let newNotes: string[] | null = null;
+
+    setCompanions((prev) =>
+      prev.map((c) => {
         if (c.id !== companionId) return c;
-        const newNotes = [...c.memoryNotes];
-        newNotes.splice(index, 1);
-        authFetchRef.current(`${API_BASE}/companions/${companionId}/memory`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ notes: newNotes }),
-        }).catch(() => {});
+        prevNotes = c.memoryNotes;
+        const updated = [...c.memoryNotes];
+        updated.splice(index, 1);
+        newNotes = updated;
         return { ...c, memoryNotes: newNotes };
+      })
+    );
+
+    if (newNotes === null) return;
+
+    try {
+      const res = await authFetchRef.current(`${API_BASE}/companions/${companionId}/memory`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: newNotes }),
       });
-      return updated;
-    });
+      if (!res.ok) throw new Error("Failed to remove memory note");
+    } catch (err) {
+      // Rollback optimistic update
+      if (prevNotes !== null) {
+        setCompanions((prev) =>
+          prev.map((c) => (c.id === companionId ? { ...c, memoryNotes: prevNotes! } : c))
+        );
+      }
+      throw err;
+    }
   }, []);
 
   const clearMessages = useCallback(async (companionId: string) => {
@@ -521,6 +577,8 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         removeMemoryNote,
         clearMessages,
         isLoaded,
+        loadError,
+        retryLoad,
       }}
     >
       {children}

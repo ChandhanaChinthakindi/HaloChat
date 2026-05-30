@@ -28,7 +28,7 @@ import { hapticsImpact } from "@/utils/haptics";
 export default function CompanionsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { companions, deleteCompanion, togglePin, isLoaded } = useCompanions();
+  const { companions, deleteCompanion, togglePin, isLoaded, loadError, retryLoad } = useCompanions();
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<TextInput>(null);
@@ -122,8 +122,9 @@ export default function CompanionsScreen() {
     return (b.lastMessageTime ?? b.createdAt) - (a.lastMessageTime ?? a.createdAt);
   });
 
-  const showEmpty = companions.length === 0;
-  const showNoResults = !showEmpty && q.length > 0 && sorted.length === 0;
+  const showError = loadError && companions.length === 0;
+  const showEmpty = !showError && companions.length === 0;
+  const showNoResults = !showEmpty && !showError && q.length > 0 && sorted.length === 0;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -215,6 +216,8 @@ export default function CompanionsScreen() {
       {/* List states */}
       {!isLoaded ? (
         <LoadingSkeleton colors={colors} />
+      ) : showError ? (
+        <ErrorState onRetry={retryLoad} colors={colors} />
       ) : showEmpty ? (
         <EmptyState />
       ) : showNoResults ? (
@@ -257,6 +260,41 @@ function LoadingSkeleton({ colors }: { colors: any }) {
           }}
         />
       ))}
+    </View>
+  );
+}
+
+function ErrorState({ onRetry, colors }: { onRetry: () => void; colors: any }) {
+  return (
+    <View style={styles.noResults}>
+      <View style={[styles.noResultsIcon, { backgroundColor: colors.muted }]}>
+        <Ionicons name="cloud-offline-outline" size={32} color={colors.mutedForeground} />
+      </View>
+      <Text style={[styles.noResultsTitle, { color: colors.foreground }]}>
+        Couldn't connect
+      </Text>
+      <Text style={[styles.noResultsSub, { color: colors.mutedForeground }]}>
+        Check your connection and try again
+      </Text>
+      <Pressable
+        onPress={onRetry}
+        style={({ pressed }) => [
+          {
+            marginTop: 8,
+            paddingHorizontal: 24,
+            paddingVertical: 12,
+            borderRadius: 20,
+            backgroundColor: colors.card,
+            borderWidth: 1,
+            borderColor: colors.border,
+            opacity: pressed ? 0.7 : 1,
+          },
+        ]}
+      >
+        <Text style={{ color: colors.foreground, fontSize: 14, fontFamily: "Inter_500Medium", fontWeight: "500" as const }}>
+          Try again
+        </Text>
+      </Pressable>
     </View>
   );
 }
