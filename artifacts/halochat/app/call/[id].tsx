@@ -247,7 +247,7 @@ export default function CallScreen() {
 
   const playTTS = useCallback(async (text: string, onStart?: () => void): Promise<void> => {
     if (!companion) return;
-    const typeInfo = COMPANION_TYPES[companion.type];
+    const typeInfo = COMPANION_TYPES[companion.type] ?? COMPANION_TYPES["supportive"];
     const voice = companion.customVoice || typeInfo.voice;
     const url = `${API_BASE}/companion/tts?text=${encodeURIComponent(text.slice(0, 600))}&voice=${voice}&companionId=${companion.id}`;
 
@@ -663,7 +663,7 @@ export default function CallScreen() {
       phaseRef.current = "thinking";
 
       try {
-        const typeInfo = COMPANION_TYPES[companion.type];
+        const typeInfo = COMPANION_TYPES[companion.type] ?? COMPANION_TYPES["supportive"];
         const greetingPrompt = `You just received a voice call from the user. Greet them warmly and naturally in 1 sentence. Be yourself (${typeInfo.label} companion).`;
         const res = await authFetchRef.current(`${API_BASE}/companion/chat-sync`, {
           method: "POST",
@@ -794,7 +794,7 @@ export default function CallScreen() {
     );
   }
 
-  const typeInfo = COMPANION_TYPES[companion.type];
+  const typeInfo = COMPANION_TYPES[companion.type] ?? COMPANION_TYPES["supportive"];
   const initials = companion.name
     .split(" ")
     .slice(0, 2)

@@ -38,7 +38,7 @@ export function CompanionCard({ companion, onPress, onCallPress, onLongPress }: 
     transform: [{ scale: scale.value }],
   }));
 
-  const typeInfo = COMPANION_TYPES[companion.type];
+  const typeInfo = COMPANION_TYPES[companion.type] ?? COMPANION_TYPES["supportive"];
   const initials = companion.name
     .split(" ")
     .slice(0, 2)

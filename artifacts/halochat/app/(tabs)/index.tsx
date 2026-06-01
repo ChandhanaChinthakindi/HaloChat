@@ -110,7 +110,7 @@ export default function CompanionsScreen() {
     ? companions.filter(
         (c) =>
           c.name.toLowerCase().includes(q) ||
-          COMPANION_TYPES[c.type].label.toLowerCase().includes(q)
+          (COMPANION_TYPES[c.type] ?? COMPANION_TYPES["supportive"]).label.toLowerCase().includes(q)
       )
     : companions;
 

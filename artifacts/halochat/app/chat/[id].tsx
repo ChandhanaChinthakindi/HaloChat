@@ -806,7 +806,7 @@ export default function ChatScreen() {
     );
   }
 
-  const typeInfo = COMPANION_TYPES[companion.type];
+  const typeInfo = COMPANION_TYPES[companion.type] ?? COMPANION_TYPES["supportive"];
   const initials = companion.name
     .split(" ")
     .slice(0, 2)
@@ -1215,7 +1215,7 @@ function GreetingCard({
   chips: string[];
   onChipPress: (text: string) => void;
 }) {
-  const typeInfo = COMPANION_TYPES[companion.type as CompanionType];
+  const typeInfo = COMPANION_TYPES[companion.type as CompanionType] ?? COMPANION_TYPES["supportive"];
   const initials = companion.name
     .split(" ")
     .slice(0, 2)
