@@ -102,11 +102,11 @@ export default function LoginScreen() {
               <Ionicons name="person-outline" size={18} color={colors.mutedForeground} style={styles.inputIcon} />
               <TextInput
                 style={[styles.input, { color: colors.foreground }]}
-                placeholder="Email or username"
+                placeholder="Email"
                 placeholderTextColor={colors.mutedForeground}
                 value={identifier}
                 onChangeText={setIdentifier}
-                keyboardType="default"
+                keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
                 returnKeyType="next"

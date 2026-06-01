@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
-import { eq, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { sendPasswordResetEmail } from "../lib/email";
@@ -59,8 +59,6 @@ function signRefreshToken(userId: string, version: number): string {
   return jwt.sign({ sub: userId, rtv: version }, JWT_REFRESH_SECRET, { expiresIn: "30d" });
 }
 
-const USERNAME_RE = /^[a-z0-9_-]{3,20}$/;
-
 function validatePassword(password: string): string | null {
   if (password.length < 8) return "Password must be at least 8 characters";
   if (!/[A-Z]/.test(password)) return "Password must contain at least one uppercase letter";
@@ -75,7 +73,6 @@ function userPayload(user: typeof usersTable.$inferSelect) {
     id: user.id,
     email: user.email,
     name: user.name,
-    username: user.username,
     gender: user.gender ?? null,
     dateOfBirth: user.dateOfBirth ?? null,
   };
@@ -92,17 +89,13 @@ function calcAge(dob: string): number {
 
 // POST /auth/signup
 router.post("/auth/signup", authLimiter, async (req, res) => {
-  const { email, password, name, username, gender, dateOfBirth } = req.body as {
-    email?: string; password?: string; name?: string; username?: string;
+  const { email, password, name, gender, dateOfBirth } = req.body as {
+    email?: string; password?: string; name?: string;
     gender?: string; dateOfBirth?: string;
   };
 
   if (!email?.trim() || !password) {
     res.status(400).json({ error: "Email and password are required" });
-    return;
-  }
-  if (!username?.trim()) {
-    res.status(400).json({ error: "Username is required" });
     return;
   }
   const pwError = validatePassword(password);
@@ -129,33 +122,23 @@ router.post("/auth/signup", authLimiter, async (req, res) => {
     return;
   }
 
-  const usernameLower = username.trim().toLowerCase();
-  if (!USERNAME_RE.test(usernameLower)) {
-    res.status(400).json({ error: "Username must be 3–20 characters: letters, numbers, _ or -" });
-    return;
-  }
-
   const emailLower = email.toLowerCase().trim();
 
   try {
-    const conditions = usernameLower
-      ? or(eq(usersTable.email, emailLower), eq(usersTable.username, usernameLower))
-      : eq(usersTable.email, emailLower);
-    const [existing] = await db.select({ id: usersTable.id, email: usersTable.email, username: usersTable.username }).from(usersTable).where(conditions);
+    const [existing] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.email, emailLower));
 
     if (existing) {
-      if (existing.email === emailLower) {
-        res.status(409).json({ error: "An account with this email already exists" });
-      } else {
-        res.status(409).json({ error: "That username is already taken" });
-      }
+      res.status(409).json({ error: "An account with this email already exists" });
       return;
     }
 
     const passwordHash = await bcrypt.hash(password, 14);
     const [user] = await db
       .insert(usersTable)
-      .values({ email: emailLower, passwordHash, name: name?.trim() ?? "", username: usernameLower, gender: gender.trim(), dateOfBirth })
+      .values({ email: emailLower, passwordHash, name: name?.trim() ?? "", gender: gender.trim(), dateOfBirth })
       .returning();
 
     res.status(201).json({
@@ -169,41 +152,19 @@ router.post("/auth/signup", authLimiter, async (req, res) => {
   }
 });
 
-// GET /auth/check-username?username=xxx
-router.get("/auth/check-username", async (req, res) => {
-  const username = (req.query.username as string | undefined)?.trim().toLowerCase();
-  if (!username || !USERNAME_RE.test(username)) {
-    res.status(400).json({ error: "Invalid username" });
-    return;
-  }
-  try {
-    const [existing] = await db
-      .select({ id: usersTable.id })
-      .from(usersTable)
-      .where(eq(usersTable.username, username));
-    res.json({ available: !existing });
-  } catch (err) {
-    logger.error({ err }, "Check username error");
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-// POST /auth/login — accepts email or username in the `identifier` field
+// POST /auth/login
 router.post("/auth/login", authLimiter, async (req, res) => {
   const { identifier, password } = req.body as { identifier?: string; password?: string };
 
   if (!identifier?.trim() || !password) {
-    res.status(400).json({ error: "Email/username and password are required" });
+    res.status(400).json({ error: "Email and password are required" });
     return;
   }
 
   const id = identifier.trim().toLowerCase();
-  const isEmail = id.includes("@");
 
   try {
-    const [user] = await db.select().from(usersTable).where(
-      isEmail ? eq(usersTable.email, id) : eq(usersTable.username, id)
-    );
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.email, id));
 
     if (!user || !user.passwordHash) {
       res.status(401).json({ error: "Invalid credentials" });
@@ -325,11 +286,11 @@ router.post("/auth/google", async (req, res) => {
   }
 });
 
-// POST /auth/forgot-password — send a reset email; accepts email or username
+// POST /auth/forgot-password — send a reset email
 router.post("/auth/forgot-password", authLimiter, async (req, res) => {
   const { identifier } = req.body as { identifier?: string };
   if (!identifier?.trim()) {
-    res.status(400).json({ error: "Email or username is required" });
+    res.status(400).json({ error: "Email is required" });
     return;
   }
 
@@ -338,10 +299,7 @@ router.post("/auth/forgot-password", authLimiter, async (req, res) => {
 
   try {
     const id = identifier.trim().toLowerCase();
-    const isEmail = id.includes("@");
-    const [user] = await db.select().from(usersTable).where(
-      isEmail ? eq(usersTable.email, id) : eq(usersTable.username, id)
-    );
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.email, id));
     if (!user) return;
 
     const rawToken = crypto.randomBytes(32).toString("hex");

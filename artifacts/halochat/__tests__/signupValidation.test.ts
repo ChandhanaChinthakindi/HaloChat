@@ -5,11 +5,8 @@
 import { describe, it, expect } from "vitest";
 import { calcAge } from "../utils/chatUtils";
 
-const USERNAME_RE = /^[a-z0-9_-]{3,20}$/;
-
 function validateSignup(fields: {
   name: string;
-  username: string;
   email: string;
   password: string;
   confirmPassword: string;
@@ -21,7 +18,6 @@ function validateSignup(fields: {
   const errors: string[] = [];
 
   if (!fields.name.trim()) errors.push("name required");
-  if (!USERNAME_RE.test(fields.username)) errors.push("invalid username");
   if (!fields.email.trim()) errors.push("email required");
   if (fields.password.length < 8) errors.push("password too short");
   if (fields.password !== fields.confirmPassword) errors.push("passwords don't match");
@@ -44,7 +40,6 @@ function validateSignup(fields: {
 
 const VALID_FORM = {
   name: "Jane Doe",
-  username: "janedoe",
   email: "jane@example.com",
   password: "password123",
   confirmPassword: "password123",
@@ -64,23 +59,6 @@ describe("Signup form validation", () => {
     const { valid, errors } = validateSignup({ ...VALID_FORM, name: "  " });
     expect(valid).toBe(false);
     expect(errors).toContain("name required");
-  });
-
-  it("fails for a username shorter than 3 characters", () => {
-    const { valid, errors } = validateSignup({ ...VALID_FORM, username: "ab" });
-    expect(valid).toBe(false);
-    expect(errors).toContain("invalid username");
-  });
-
-  it("fails for a username with disallowed characters", () => {
-    const { valid, errors } = validateSignup({ ...VALID_FORM, username: "user name!" });
-    expect(valid).toBe(false);
-    expect(errors).toContain("invalid username");
-  });
-
-  it("accepts usernames with letters, numbers, dashes and underscores", () => {
-    const { valid } = validateSignup({ ...VALID_FORM, username: "user_name-123" });
-    expect(valid).toBe(true);
   });
 
   it("fails when password is shorter than 8 characters", () => {

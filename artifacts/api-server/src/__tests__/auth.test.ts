@@ -40,7 +40,7 @@ vi.mock("@workspace/db", () => {
       update: () => makeChain(),
       delete: () => makeChain(),
     },
-    usersTable: { id: "id", email: "email", username: "username", passwordHash: "passwordHash", gender: "gender", dateOfBirth: "dateOfBirth", name: "name", appleId: "appleId", googleId: "googleId", resetTokenHash: "resetTokenHash", resetTokenExpiry: "resetTokenExpiry" },
+    usersTable: { id: "id", email: "email", passwordHash: "passwordHash", gender: "gender", dateOfBirth: "dateOfBirth", name: "name", appleId: "appleId", googleId: "googleId", resetTokenHash: "resetTokenHash", resetTokenExpiry: "resetTokenExpiry" },
     companionsTable: {},
     messagesTable: {},
     memoryNotesTable: {},
@@ -102,7 +102,6 @@ function clearQueue() {
 const VALID_SIGNUP = {
   email: "test@example.com",
   password: "Password123!",
-  username: "testuser",
   gender: "female",
   dateOfBirth: "1998-06-15", // age ~27
 };
@@ -111,7 +110,6 @@ const MOCK_USER = {
   id: "user-id-123",
   email: "test@example.com",
   name: "Test User",
-  username: "testuser",
   gender: "female",
   dateOfBirth: "1998-06-15",
   passwordHash: "hashed-pw",
@@ -138,17 +136,6 @@ describe("POST /api/auth/signup", () => {
     const res = await request(app).post("/api/auth/signup").send({ ...VALID_SIGNUP, password: "short" });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/8/);
-  });
-
-  it("returns 400 when username is missing", async () => {
-    const res = await request(app).post("/api/auth/signup").send({ ...VALID_SIGNUP, username: undefined });
-    expect(res.status).toBe(400);
-  });
-
-  it("returns 400 for an invalid username format", async () => {
-    const res = await request(app).post("/api/auth/signup").send({ ...VALID_SIGNUP, username: "ab" });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/3.20/);
   });
 
   it("returns 400 when gender is missing", async () => {
@@ -195,14 +182,6 @@ describe("POST /api/auth/signup", () => {
     const res = await request(app).post("/api/auth/signup").send(VALID_SIGNUP);
     expect(res.status).toBe(409);
     expect(res.body.error).toMatch(/email/i);
-  });
-
-  it("returns 409 when username is already taken", async () => {
-    const existing = { ...MOCK_USER, email: "other@example.com", username: "testuser" };
-    queueResults([existing]); // existing user found by username
-    const res = await request(app).post("/api/auth/signup").send(VALID_SIGNUP);
-    expect(res.status).toBe(409);
-    expect(res.body.error).toMatch(/username/i);
   });
 
   it("returns 201 with tokens and user on success", async () => {
@@ -256,12 +235,6 @@ describe("POST /api/auth/login", () => {
     expect(res.body.user.email).toBe("test@example.com");
   });
 
-  it("accepts username as identifier", async () => {
-    bcryptResults.compareResult = true;
-    queueResults([MOCK_USER]);
-    const res = await request(app).post("/api/auth/login").send({ identifier: "testuser", password: "password123" });
-    expect(res.status).toBe(200);
-  });
 });
 
 describe("POST /api/auth/refresh", () => {

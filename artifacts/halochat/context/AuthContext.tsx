@@ -47,7 +47,6 @@ export interface AuthUser {
   id: string;
   email: string | null;
   name: string | null;
-  username: string | null;
   gender: string | null;
   dateOfBirth: string | null; // YYYY-MM-DD
 }
@@ -58,7 +57,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   accessToken: string | null;
   login: (identifier: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, name: string, username: string, gender: string, dateOfBirth: string) => Promise<void>;
+  signup: (email: string, password: string, name: string, gender: string, dateOfBirth: string) => Promise<void>;
   appleSignIn: (identityToken: string, fullName?: string) => Promise<void>;
   logout: () => Promise<void>;
   deleteAccount: () => Promise<void>;
@@ -157,11 +156,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await storeSession(data.accessToken, data.refreshToken, data.user);
   };
 
-  const signup = async (email: string, password: string, name: string, username: string, gender: string, dateOfBirth: string) => {
+  const signup = async (email: string, password: string, name: string, gender: string, dateOfBirth: string) => {
     const res = await fetch(`${API_BASE}/auth/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, name, username, gender, dateOfBirth }),
+      body: JSON.stringify({ email, password, name, gender, dateOfBirth }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Signup failed");

@@ -1,9 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -19,7 +18,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { calcAge } from "@/utils/chatUtils";
-import { API_BASE } from "@/utils/api";
 
 const GENDER_OPTIONS = [
   { value: "female" as const, label: "Female", icon: "♀" },
@@ -32,7 +30,6 @@ export default function SignupScreen() {
   const insets = useSafeAreaInsets();
   const { signup } = useAuth();
 
-  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -43,42 +40,11 @@ export default function SignupScreen() {
   const [dobYear, setDobYear] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
-  const [usernameChecking, setUsernameChecking] = useState(false);
-
-  const usernameRef = useRef<TextInput>(null);
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
   const monthRef = useRef<TextInput>(null);
   const yearRef = useRef<TextInput>(null);
-
-  const usernameError =
-    username.length > 0 && !/^[a-z0-9_-]{3,20}$/.test(username.toLowerCase())
-      ? "3–20 chars: letters, numbers, _ or -"
-      : null;
-
-  useEffect(() => {
-    if (username.length < 3 || usernameError) {
-      setUsernameAvailable(null);
-      setUsernameChecking(false);
-      return;
-    }
-    setUsernameChecking(true);
-    setUsernameAvailable(null);
-    const timer = setTimeout(async () => {
-      try {
-        const res = await fetch(`${API_BASE}/auth/check-username?username=${encodeURIComponent(username)}`);
-        const data = await res.json();
-        setUsernameAvailable(data.available === true);
-      } catch {
-        setUsernameAvailable(null);
-      } finally {
-        setUsernameChecking(false);
-      }
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [username, usernameError]);
 
   const dobFull =
     dobDay.length === 2 && dobMonth.length === 2 && dobYear.length === 4
@@ -100,9 +66,6 @@ export default function SignupScreen() {
   const pwAllValid = password.length > 0 && pwRules.every((r) => r.ok);
 
   const canSubmit =
-    username.trim().length >= 3 &&
-    !usernameError &&
-    usernameAvailable === true &&
     email.trim().length > 0 &&
     pwAllValid &&
     password === confirmPassword &&
@@ -114,7 +77,7 @@ export default function SignupScreen() {
     setIsLoading(true);
     try {
       const dateOfBirth = `${dobYear}-${dobMonth.padStart(2, "0")}-${dobDay.padStart(2, "0")}`;
-      await signup(email.trim(), password, "", username.trim().toLowerCase(), gender!, dateOfBirth);
+      await signup(email.trim(), password, "", gender!, dateOfBirth);
       router.replace("/");
     } catch (e: any) {
       Alert.alert("Sign Up Failed", e.message || "Please try again.");
@@ -165,50 +128,6 @@ export default function SignupScreen() {
 
           {/* Form */}
           <View style={styles.form}>
-            <View>
-              <View style={[styles.inputRow, {
-                backgroundColor: colors.card,
-                borderColor: username
-                  ? usernameError
-                    ? "#EF4444"
-                    : usernameAvailable === false
-                    ? "#EF4444"
-                    : usernameAvailable === true
-                    ? "#22C55E"
-                    : "#818263"
-                  : colors.border,
-              }]}>
-                <Text style={[styles.atSign, { color: colors.mutedForeground }]}>@</Text>
-                <TextInput
-                  ref={usernameRef}
-                  style={[styles.input, { color: colors.foreground }]}
-                  placeholder="Username"
-                  placeholderTextColor={colors.mutedForeground}
-                  value={username}
-                  onChangeText={(t) => setUsername(t.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoFocus
-                  returnKeyType="next"
-                  onSubmitEditing={() => emailRef.current?.focus()}
-                />
-                {usernameChecking && <ActivityIndicator size="small" color={colors.mutedForeground} />}
-                {!usernameChecking && usernameAvailable === true && (
-                  <Ionicons name="checkmark-circle" size={18} color="#22C55E" />
-                )}
-                {!usernameChecking && usernameAvailable === false && (
-                  <Ionicons name="close-circle" size={18} color="#EF4444" />
-                )}
-              </View>
-              {usernameError ? (
-                <Text style={[styles.fieldError, { color: "#EF4444" }]}>{usernameError}</Text>
-              ) : usernameAvailable === false ? (
-                <Text style={[styles.fieldError, { color: "#EF4444" }]}>That username is already taken</Text>
-              ) : usernameAvailable === true ? (
-                <Text style={[styles.fieldError, { color: "#22C55E" }]}>Username available</Text>
-              ) : null}
-            </View>
-
             <View style={[styles.inputRow, { backgroundColor: colors.card, borderColor: email ? "#818263" : colors.border }]}>
               <Ionicons name="mail-outline" size={18} color={colors.mutedForeground} style={styles.inputIcon} />
               <TextInput
@@ -221,6 +140,7 @@ export default function SignupScreen() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
+                autoFocus
                 returnKeyType="next"
                 onSubmitEditing={() => passwordRef.current?.focus()}
               />

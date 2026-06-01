@@ -9,7 +9,6 @@ export const usersTable = pgTable("users", {
   appleId: text("apple_id").unique(),
   googleId: text("google_id").unique(),
   name: text("name"),
-  username: text("username").unique(),
   gender: text("gender"),
   dateOfBirth: text("date_of_birth"), // YYYY-MM-DD
   pushToken: text("push_token"),

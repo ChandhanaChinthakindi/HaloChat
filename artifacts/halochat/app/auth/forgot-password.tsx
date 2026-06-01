@@ -110,7 +110,7 @@ export default function ForgotPasswordScreen() {
                 </LinearGradient>
                 <Text style={[styles.title, { color: colors.foreground }]}>Forgot password?</Text>
                 <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-                  {"Enter your email or username and we'll send you a link to reset your password."}
+                  {"Enter your email and we'll send you a link to reset your password."}
                 </Text>
               </View>
 
@@ -119,7 +119,7 @@ export default function ForgotPasswordScreen() {
                   <Ionicons name="person-outline" size={18} color={colors.mutedForeground} style={styles.inputIcon} />
                   <TextInput
                     style={[styles.input, { color: colors.foreground }]}
-                    placeholder="Email or username"
+                    placeholder="Email"
                     placeholderTextColor={colors.mutedForeground}
                     value={identifier}
                     onChangeText={setIdentifier}

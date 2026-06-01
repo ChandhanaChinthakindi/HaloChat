@@ -247,11 +247,6 @@ export default function SettingsScreen() {
                   {userName || user?.name || "Your Account"}
                 </Text>
               )}
-              {user?.username && (
-                <Text style={[styles.profileUsername, { color: colors.mutedForeground }]}>
-                  @{user.username}
-                </Text>
-              )}
             </View>
 
             <Pressable
@@ -466,11 +461,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "700" as const,
     fontFamily: "Inter_700Bold",
-  },
-  profileUsername: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    marginTop: 1,
   },
   saveBtn: {
     fontSize: 14,
