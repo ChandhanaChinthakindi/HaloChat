@@ -33,9 +33,7 @@ import { useColors } from "@/hooks/useColors";
 
 const VOICE_SAMPLES: Record<CompanionType, string> = {
   romantic:   "I've been thinking about you all day. It's really good to hear from you.",
-  flirty:     "Okay, I was going to play it cool, but honestly? I'm glad you're here.",
   supportive: "Hey, I'm here. Whatever's on your mind — I'm listening, no rush.",
-  mentor:     "Let's figure this out together. What's the real challenge you're facing?",
   anime:      "YOU'RE HERE! I've been waiting so long — this is literally the best day!",
   bestfriend: "Okay spill. What happened? I need to know absolutely everything right now.",
   therapist:  "Take your time. There's no pressure here — I'm just glad you reached out.",
@@ -71,9 +69,7 @@ const VOICES_BY_GENDER: Record<string, { id: string; label: string }[]> = {
 
 const COMPANION_SAMPLES: Record<CompanionType, string> = {
   romantic: "thinking about you... hope your day's been good ♡",
-  flirty: "okay so I was going to play it cool but that's not happening",
   supportive: "hey, I'm here. whatever you need — no pressure.",
-  mentor: "what's the real thing you're trying to figure out?",
   anime: "YOU'RE HERE!! I've been waiting omg 😭✨",
   bestfriend: "okay spill. what happened. I need to know everything",
   therapist: "take your time — what's been sitting heavy lately?",
@@ -81,8 +77,7 @@ const COMPANION_SAMPLES: Record<CompanionType, string> = {
 };
 
 const ALL_TYPES: CompanionType[] = [
-  "romantic", "flirty", "supportive", "mentor",
-  "anime", "bestfriend", "therapist", "roleplay",
+  "romantic", "supportive", "anime", "bestfriend", "therapist", "roleplay",
 ];
 
 const GENDER_OPTIONS: { value: "female" | "male" | "nonbinary"; label: string; icon: string }[] = [
@@ -106,7 +101,6 @@ export default function CreateScreen() {
   const [selectedVoice, setSelectedVoice] = useState<string | null>(null);
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const [loadingVoice, setLoadingVoice] = useState<string | null>(null);
-  const [customPersonality, setCustomPersonality] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
 
@@ -187,7 +181,7 @@ export default function CreateScreen() {
       const companion = await createCompanion(
         name.trim(),
         selectedType,
-        customPersonality.trim() || undefined,
+        undefined,
         gender ?? undefined,
         selectedVoice ?? undefined,
       );
@@ -296,28 +290,6 @@ export default function CreateScreen() {
               />
             )}
 
-            {/* Custom personality */}
-            <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-              CUSTOM PERSONALITY <Text style={{ fontWeight: "400" as const }}>(OPTIONAL)</Text>
-            </Text>
-            <View style={[styles.inputWrapper, styles.textAreaWrapper, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <TextInput
-                style={[styles.input, styles.textArea, { color: colors.foreground }]}
-                placeholder="Add anything that makes them uniquely yours..."
-                placeholderTextColor={colors.mutedForeground}
-                value={customPersonality}
-                onChangeText={setCustomPersonality}
-                multiline
-                numberOfLines={3}
-                maxLength={500}
-                textAlignVertical="top"
-                returnKeyType="done"
-                blurOnSubmit
-              />
-            </View>
-            {customPersonality.length > 0 && (
-              <Text style={[styles.charCount, { color: colors.mutedForeground }]}>{customPersonality.length}/500</Text>
-            )}
           </>
         ) : (
           /* ── Full flow: choose type first ── */
@@ -411,25 +383,6 @@ export default function CreateScreen() {
               />
             )}
 
-            <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-              CUSTOM PERSONALITY <Text style={{ fontWeight: "400" as const }}>(OPTIONAL)</Text>
-            </Text>
-            <View style={[styles.inputWrapper, styles.textAreaWrapper, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <TextInput
-                style={[styles.input, styles.textArea, { color: colors.foreground }]}
-                placeholder="Add a custom personality description to make them uniquely yours..."
-                placeholderTextColor={colors.mutedForeground}
-                value={customPersonality}
-                onChangeText={setCustomPersonality}
-                multiline
-                numberOfLines={4}
-                maxLength={500}
-                textAlignVertical="top"
-                returnKeyType="done"
-                blurOnSubmit
-              />
-            </View>
-            <Text style={[styles.charCount, { color: colors.mutedForeground }]}>{customPersonality.length}/500</Text>
           </>
         )}
       </KeyboardAwareScrollViewCompat>
@@ -568,10 +521,7 @@ const styles = StyleSheet.create({
   sampleQuote: { fontSize: 14, fontFamily: "Inter_400Regular", fontStyle: "italic", lineHeight: 20 },
   // Inputs
   inputWrapper: { borderRadius: 16, borderWidth: 1.5, paddingHorizontal: 16, paddingVertical: 14 },
-  textAreaWrapper: { paddingVertical: 12 },
   input: { fontSize: 16, fontFamily: "Inter_400Regular" },
-  textArea: { minHeight: 80 },
-  charCount: { fontSize: 12, fontFamily: "Inter_400Regular", textAlign: "right", marginTop: -8 },
   // Gender
   genderRow: { flexDirection: "row", gap: 10 },
   genderChip: {

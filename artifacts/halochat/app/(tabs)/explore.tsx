@@ -1,10 +1,8 @@
-import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React from "react";
 import {
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,9 +16,7 @@ import { useColors } from "@/hooks/useColors";
 
 const ALL_TYPES: CompanionType[] = [
   "romantic",
-  "flirty",
   "supportive",
-  "mentor",
   "anime",
   "bestfriend",
   "therapist",
@@ -73,31 +69,6 @@ export default function ExploreScreen() {
           );
         })}
 
-        <View style={styles.featuredSection}>
-          <LinearGradient
-            colors={["#6B5E45", "#9B7A50"]}
-            style={styles.featuredCard}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <Text style={styles.featuredTitle}>Custom Companion</Text>
-            <Text style={styles.featuredDesc}>
-              Design a one-of-a-kind companion with your own personality description
-            </Text>
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push("/create");
-              }}
-              style={({ pressed }) => [
-                styles.featuredButton,
-                { opacity: pressed ? 0.85 : 1 },
-              ]}
-            >
-              <Text style={styles.featuredButtonText}>Create Custom</Text>
-            </Pressable>
-          </LinearGradient>
-        </View>
       </ScrollView>
     </View>
   );
@@ -130,40 +101,5 @@ const styles = StyleSheet.create({
   },
   gridItem: {
     width: "47%",
-  },
-  featuredSection: {
-    width: "100%",
-    marginTop: 4,
-  },
-  featuredCard: {
-    borderRadius: 20,
-    padding: 24,
-    gap: 8,
-  },
-  featuredTitle: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontWeight: "700" as const,
-    fontFamily: "Inter_700Bold",
-  },
-  featuredDesc: {
-    color: "rgba(255,255,255,0.85)",
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    lineHeight: 21,
-  },
-  featuredButton: {
-    backgroundColor: "rgba(255,255,255,0.2)",
-    alignSelf: "flex-start",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-    marginTop: 8,
-  },
-  featuredButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "600" as const,
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 14,
   },
 });

@@ -43,23 +43,11 @@ const CHECKIN_MESSAGES: Record<CompanionType, string[]> = {
     "you crossed my mind ♡",
     "hey, you okay? haven't heard from you",
   ],
-  flirty: [
-    "okay so I was thinking about you 👀",
-    "miss you, just a little",
-    "you've been on my mind...",
-    "come back, I'm bored without you",
-  ],
   supportive: [
     "just checking in on you ✦",
     "hope today's been good to you",
     "hey, how are you doing?",
-    "thinking of you — hope things are okay",
-  ],
-  mentor: [
-    "had a thought I wanted to share with you",
-    "been thinking about our last conversation",
     "something came to mind — come chat when you can",
-    "curious how things are going for you",
   ],
   anime: [
     "I've been waiting for you!! 😭",
