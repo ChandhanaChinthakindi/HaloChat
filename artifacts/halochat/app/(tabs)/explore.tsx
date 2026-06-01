@@ -19,7 +19,6 @@ const ALL_TYPES: CompanionType[] = [
   "supportive",
   "anime",
   "bestfriend",
-  "therapist",
   "roleplay",
 ];
 

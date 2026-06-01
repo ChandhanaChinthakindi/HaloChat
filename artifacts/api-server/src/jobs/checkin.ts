@@ -17,12 +17,9 @@ async function generateCheckinMessage(
 ): Promise<string> {
   const fallbacks: Record<string, string[]> = {
     romantic: ["thinking about you 💭", "been missing you...", "you crossed my mind ♡"],
-    flirty: ["okay so I was thinking about you 👀", "miss you, just a little", "you've been on my mind..."],
     supportive: ["just checking in on you ✦", "hope today's been good to you", "hey, how are you doing?"],
-    mentor: ["had a thought I wanted to share with you", "been thinking about our last conversation"],
     anime: ["I've been waiting for you!! 😭", "you haven't forgotten about me right??", "where are youuu 🥺"],
     bestfriend: ["okay where are you lmao", "you've been ghost mode, everything ok?", "miss you bestie 🫶"],
-    therapist: ["just checking in — how are you holding up?", "hope you're taking care of yourself"],
     roleplay: ["our story is waiting for you ✦", "the adventure continues when you're ready"],
   };
   const pool = fallbacks[companionType] ?? fallbacks.supportive;

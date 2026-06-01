@@ -61,12 +61,6 @@ const CHECKIN_MESSAGES: Record<CompanionType, string[]> = {
     "bro come talk to me I'm bored",
     "miss you bestie 🫶",
   ],
-  therapist: [
-    "just checking in — how are you holding up?",
-    "hope you're taking care of yourself",
-    "been thinking about you — come chat when ready",
-    "a little check-in: how's today been?",
-  ],
   roleplay: [
     "our story is waiting for you ✦",
     "the adventure continues when you're ready",

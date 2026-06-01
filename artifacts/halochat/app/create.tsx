@@ -36,7 +36,6 @@ const VOICE_SAMPLES: Record<CompanionType, string> = {
   supportive: "Hey, I'm here. Whatever's on your mind — I'm listening, no rush.",
   anime:      "YOU'RE HERE! I've been waiting so long — this is literally the best day!",
   bestfriend: "Okay spill. What happened? I need to know absolutely everything right now.",
-  therapist:  "Take your time. There's no pressure here — I'm just glad you reached out.",
   roleplay:   "The story is waiting... wherever you want to begin, I'll be right there with you.",
 };
 
@@ -72,12 +71,11 @@ const COMPANION_SAMPLES: Record<CompanionType, string> = {
   supportive: "hey, I'm here. whatever you need — no pressure.",
   anime: "YOU'RE HERE!! I've been waiting omg 😭✨",
   bestfriend: "okay spill. what happened. I need to know everything",
-  therapist: "take your time — what's been sitting heavy lately?",
   roleplay: "the story is waiting... where shall we begin? ✦",
 };
 
 const ALL_TYPES: CompanionType[] = [
-  "romantic", "supportive", "anime", "bestfriend", "therapist", "roleplay",
+  "romantic", "supportive", "anime", "bestfriend", "roleplay",
 ];
 
 const GENDER_OPTIONS: { value: "female" | "male" | "nonbinary"; label: string; icon: string }[] = [

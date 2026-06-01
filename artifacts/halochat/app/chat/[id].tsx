@@ -1316,10 +1316,9 @@ function MoodCheckIn({
 
 const STARTER_CHIPS: Record<string, string[]> = {
   romantic:    ["Tell me about your day ♡", "I've been thinking about you", "How are you feeling?"],
-  supportive:  ["I need to talk", "Something's been bothering me", "I have a decision to make"],
+  supportive:  ["I need to talk", "Something's been bothering me", "I need to process something"],
   anime:       ["Let's go on an adventure!", "I have big news!", "Tell me your favorite thing"],
   bestfriend:  ["Okay spill, what's the tea", "I'm bored, entertain me", "Something weird happened"],
-  therapist:   ["I've been feeling off lately", "Can we talk?", "I need to process something"],
   roleplay:    ["Let's start a story", "I want to be the hero", "Set the scene for us"],
 };
 
