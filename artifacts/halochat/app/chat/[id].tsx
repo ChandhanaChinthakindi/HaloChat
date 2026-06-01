@@ -494,6 +494,7 @@ export default function ChatScreen() {
           body: JSON.stringify({
             messages: msgs.slice(-12).map((m) => ({ role: m.role, content: m.content })),
             existingNotes: companion.memoryNotes,
+            userName: user?.name || null,
           }),
         });
         const data = (await res.json()) as { facts?: string[] };

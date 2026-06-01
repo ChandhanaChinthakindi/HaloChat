@@ -735,6 +735,7 @@ export default function CallScreen() {
           body: JSON.stringify({
             messages: msgs.map((m) => ({ role: m.role, content: m.content })),
             existingNotes: companion.memoryNotes,
+            userName: user?.name || null,
           }),
         });
         const data = (await res.json()) as { facts?: string[] };

@@ -278,9 +278,10 @@ router.post("/companion/summarize", requireAuth, backgroundLimiter, async (req, 
 });
 
 router.post("/companion/extract-memory", requireAuth, backgroundLimiter, async (req, res) => {
-  const { messages, existingNotes } = req.body as {
+  const { messages, existingNotes, userName } = req.body as {
     messages: Array<{ role: string; content: string }>;
     existingNotes: string[];
+    userName?: string | null;
   };
 
   if (!process.env["OPENAI_API_KEY"] || !messages?.length) {
@@ -292,15 +293,18 @@ router.post("/companion/extract-memory", requireAuth, backgroundLimiter, async (
     ? existingNotes.map((n) => `- ${n}`).join("\n")
     : "None yet";
 
-  const systemPrompt = `You are a memory extraction AI. Given a conversation excerpt, identify any NEW personal facts about the user worth remembering for future conversations.
+  const subject = userName?.trim() || "The user";
+
+  const systemPrompt = `You are a memory extraction AI. Given a conversation excerpt, identify any NEW personal facts about ${subject} worth remembering for future conversations.
 
 Existing known facts (DO NOT duplicate or rephrase these):
 ${existingBlock}
 
 Rules:
-- Only extract facts that are personal to the user
+- Only extract facts that are personal to ${subject}
 - Must NOT already be captured in the existing facts above
 - Keep each fact under 12 words, concrete and specific
+- Always refer to the person as "${subject}" (never as "user" or "the user")
 - Focus on: name, job, hobbies, goals, relationships, location, pets, important dates, struggles, preferences
 - Return ONLY valid JSON: { "facts": ["fact 1", "fact 2"] }
 - Return { "facts": [] } if nothing new to remember`;
