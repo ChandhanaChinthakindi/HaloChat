@@ -158,17 +158,6 @@ export default function LoginScreen() {
               </LinearGradient>
             </Pressable>
 
-            <Pressable
-              onPress={() => router.push("/auth/forgot-password")}
-              hitSlop={8}
-              style={({ pressed }) => [styles.forgotLink, { opacity: pressed ? 0.6 : 1 }]}
-            >
-              <Text style={[styles.forgotText, { color: colors.mutedForeground }]}>
-                Forgot password?{"  "}
-                <Text style={{ color: colors.primary }}>Reset it</Text>
-              </Text>
-            </Pressable>
-
             {Platform.OS === "ios" && (
               <>
                 <View style={styles.divider}>
@@ -252,8 +241,6 @@ const styles = StyleSheet.create({
   footer: { flexDirection: "row", justifyContent: "center", alignItems: "center", paddingTop: 8 },
   footerText: { fontSize: 14, fontFamily: "Inter_400Regular" },
   footerLink: { fontSize: 14, fontFamily: "Inter_600SemiBold", fontWeight: "600" as const },
-  forgotLink: { alignSelf: "center", marginTop: 2 },
-  forgotText: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center" },
   divider: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 4 },
   dividerLine: { flex: 1, height: StyleSheet.hairlineWidth },
   dividerLabel: { fontSize: 13, fontFamily: "Inter_400Regular" },
