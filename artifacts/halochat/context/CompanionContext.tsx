@@ -287,7 +287,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       gender?: "male" | "female" | "nonbinary",
       customVoice?: string
     ): Promise<Companion> => {
-      const gradient = COMPANION_TYPES[type].gradient;
+      const gradient = (COMPANION_TYPES[type] ?? COMPANION_TYPES["supportive"]).gradient;
       const res = await authFetch(`${API_BASE}/companions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

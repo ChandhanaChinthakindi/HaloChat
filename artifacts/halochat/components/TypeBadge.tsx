@@ -13,7 +13,7 @@ interface TypeCardProps {
 
 export function TypeCard({ type, selected, onPress }: TypeCardProps) {
   const colors = useColors();
-  const info = COMPANION_TYPES[type];
+  const info = COMPANION_TYPES[type] ?? COMPANION_TYPES["supportive"];
 
   return (
     <Pressable
@@ -79,7 +79,7 @@ interface TypeBadgeProps {
 }
 
 export function TypeBadge({ type }: TypeBadgeProps) {
-  const info = COMPANION_TYPES[type];
+  const info = COMPANION_TYPES[type] ?? COMPANION_TYPES["supportive"];
   return (
     <View style={styles.badge}>
       <LinearGradient
