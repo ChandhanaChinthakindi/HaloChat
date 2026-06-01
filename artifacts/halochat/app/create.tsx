@@ -33,7 +33,7 @@ import { useColors } from "@/hooks/useColors";
 
 const VOICE_SAMPLES: Record<CompanionType, string> = {
   romantic:   "I've been thinking about you all day. It's really good to hear from you.",
-  supportive: "Hey, I'm here. Whatever's on your mind — I'm listening, no rush.",
+  confidant: "Hey, I'm here. Whatever's on your mind — I'm listening, no rush.",
   anime:      "YOU'RE HERE! I've been waiting so long — this is literally the best day!",
   bestfriend: "Okay spill. What happened? I need to know absolutely everything right now.",
   roleplay:   "The story is waiting... wherever you want to begin, I'll be right there with you.",
@@ -68,14 +68,14 @@ const VOICES_BY_GENDER: Record<string, { id: string; label: string }[]> = {
 
 const COMPANION_SAMPLES: Record<CompanionType, string> = {
   romantic: "thinking about you... hope your day's been good ♡",
-  supportive: "hey, I'm here. whatever you need — no pressure.",
+  confidant: "hey, I'm here. whatever you need — no pressure.",
   anime: "YOU'RE HERE!! I've been waiting omg 😭✨",
   bestfriend: "okay spill. what happened. I need to know everything",
   roleplay: "the story is waiting... where shall we begin? ✦",
 };
 
 const ALL_TYPES: CompanionType[] = [
-  "romantic", "supportive", "anime", "bestfriend", "roleplay",
+  "romantic", "confidant", "anime", "bestfriend", "roleplay",
 ];
 
 const GENDER_OPTIONS: { value: "female" | "male" | "nonbinary"; label: string; icon: string }[] = [
@@ -145,7 +145,7 @@ export default function CreateScreen() {
       if (Platform.OS !== "web") {
         await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false });
       }
-      const sample = selectedType ? VOICE_SAMPLES[selectedType] : VOICE_SAMPLES.supportive;
+      const sample = selectedType ? VOICE_SAMPLES[selectedType] : VOICE_SAMPLES.confidant;
       const url = `${API_BASE}/companion/tts?text=${encodeURIComponent(sample)}&voice=${voiceId}`;
       const source = { uri: url, headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined };
       const { sound } = await Audio.Sound.createAsync(source, { shouldPlay: true });

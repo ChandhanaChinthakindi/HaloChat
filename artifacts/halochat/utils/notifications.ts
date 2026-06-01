@@ -43,7 +43,7 @@ const CHECKIN_MESSAGES: Record<CompanionType, string[]> = {
     "you crossed my mind ♡",
     "hey, you okay? haven't heard from you",
   ],
-  supportive: [
+  confidant: [
     "just checking in on you ✦",
     "hope today's been good to you",
     "hey, how are you doing?",
@@ -70,7 +70,7 @@ const CHECKIN_MESSAGES: Record<CompanionType, string[]> = {
 };
 
 function pickMessage(type: CompanionType): string {
-  const msgs = CHECKIN_MESSAGES[type] ?? CHECKIN_MESSAGES.supportive;
+  const msgs = CHECKIN_MESSAGES[type] ?? CHECKIN_MESSAGES.confidant;
   return msgs[Math.floor(Math.random() * msgs.length)];
 }
 

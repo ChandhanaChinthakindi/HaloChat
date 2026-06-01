@@ -31,7 +31,7 @@ const SLIDES = [
   },
   {
     title: "Every Kind\nof Bond",
-    subtitle: "Romantic, supportive, best friend, or storyteller — find the connection you need right now",
+    subtitle: "Romantic, confidant, best friend, or storyteller — find the connection you need right now",
     gradient: ["#9A4B6B", "#D8A48F"] as [string, string],
     icon: "heart" as const,
   },

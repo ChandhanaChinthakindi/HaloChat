@@ -16,7 +16,7 @@ import { useColors } from "@/hooks/useColors";
 
 const ALL_TYPES: CompanionType[] = [
   "romantic",
-  "supportive",
+  "confidant",
   "anime",
   "bestfriend",
   "roleplay",
