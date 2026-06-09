@@ -296,6 +296,7 @@ export default function ChatScreen() {
           traits: companion.traits?.length ? companion.traits : undefined,
           customPersonality: companion.customPersonality,
           relationshipLevel: companion.relationshipLevel,
+          responseStyle: companion.responseStyle,
           messages: apiMessages,
         }),
         signal: controller.signal,
@@ -409,6 +410,7 @@ export default function ChatScreen() {
             memoryNotes: companion.memoryNotes,
             customPersonality: companion.customPersonality,
             relationshipLevel: companion.relationshipLevel,
+            responseStyle: companion.responseStyle,
             messages: apiMessages,
           }),
           signal: controller.signal,
@@ -526,6 +528,7 @@ export default function ChatScreen() {
             traits: companion.traits?.length ? companion.traits : undefined,
             customPersonality: companion.customPersonality,
             relationshipLevel: companion.relationshipLevel,
+            responseStyle: companion.responseStyle,
             messages: [
               ...messagesRef.current.slice(-8).map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
               {
@@ -694,6 +697,7 @@ export default function ChatScreen() {
             memoryNotes: companion.memoryNotes,
             customPersonality: companion.customPersonality,
             relationshipLevel: companion.relationshipLevel,
+            responseStyle: companion.responseStyle,
             messages: apiMessages,
           }),
           signal: controller.signal,

@@ -106,7 +106,7 @@ function buildMemoryBlock(notes: string[]): string {
 }
 
 router.post("/companion/chat", requireAuth, dailyLimit, chatLimiter, async (req, res) => {
-  const { companionType, companionName, companionGender, memoryNotes, traits, customPersonality, messages, relationshipLevel, userGender, userAge } =
+  const { companionType, companionName, companionGender, memoryNotes, traits, customPersonality, messages, relationshipLevel, userGender, userAge, responseStyle } =
     req.body as {
       companionId: string;
       companionType: string;
@@ -118,6 +118,7 @@ router.post("/companion/chat", requireAuth, dailyLimit, chatLimiter, async (req,
       relationshipLevel?: number;
       userGender?: string;
       userAge?: number;
+      responseStyle?: string;
       messages: Array<{ role: "user" | "assistant"; content: string }>;
     };
 
@@ -192,6 +193,12 @@ Examples of correct replies:
   }
 
   systemPrompt += getBondTone(typeof relationshipLevel === "number" ? relationshipLevel : 0);
+
+  if (responseStyle === "brief") {
+    systemPrompt += `\n\nRESPONSE LENGTH: The user prefers short, punchy replies. Keep each message to 1-3 sentences. Say the most important thing and stop — no padding, no over-elaborating.`;
+  } else if (responseStyle === "deep") {
+    systemPrompt += `\n\nRESPONSE LENGTH: The user wants longer, emotionally rich responses. Take your time — go deeper into feeling, detail, and nuance. Still conversational, never clinical or list-like.`;
+  }
 
   if (typeof userAge === "number") {
     if (userAge <= 19) {

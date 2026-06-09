@@ -34,6 +34,7 @@ export interface Companion {
   createdAt: number;
   streak: number;
   pinned: boolean;
+  responseStyle: ResponseStyle;
 }
 
 export interface Message {
@@ -148,11 +149,14 @@ export const COMPANION_TRAITS: Record<CompanionType, string[]> = {
   ],
 };
 
+export type ResponseStyle = "brief" | "balanced" | "deep";
+
 const ONBOARDED_KEY = "halochat_onboarded";
 const USER_NAME_KEY = "halochat_user_name";
 const STREAK_PREFIX = "halochat_streak_";
 const PIN_PREFIX = "halochat_pin_";
 const TRAITS_PREFIX = "halochat_traits_";
+const RESPONSE_STYLE_PREFIX = "halochat_rs_";
 
 async function loadStreak(id: string): Promise<number> {
   try {
@@ -201,6 +205,7 @@ function dbToCompanion(raw: any, memoryNotes: string[] = [], traits: string[] = 
     createdAt: raw.createdAt ? new Date(raw.createdAt).getTime() : Date.now(),
     streak: 0,
     pinned: false,
+    responseStyle: "balanced",
   };
 }
 
@@ -237,6 +242,7 @@ interface CompanionContextType {
   updateRelationshipLevel: (companionId: string, delta: number) => Promise<void>;
   addMemoryNote: (companionId: string, note: string) => Promise<void>;
   removeMemoryNote: (companionId: string, index: number) => Promise<void>;
+  setCompanionResponseStyle: (id: string, style: ResponseStyle) => Promise<void>;
   clearMessages: (companionId: string) => Promise<void>;
   isLoaded: boolean;
   loadError: boolean;
@@ -289,17 +295,19 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         const withMemory = await Promise.all(
           rawCompanions.map(async (c) => {
             try {
-              const [memRes, streak, pinVal, traitsRaw, avatarIdStored] = await Promise.all([
+              const [memRes, streak, pinVal, traitsRaw, avatarIdStored, rsRaw] = await Promise.all([
                 authFetch(`${API_BASE}/companions/${c.id}/memory`),
                 loadStreak(c.id),
                 AsyncStorage.getItem(PIN_PREFIX + c.id),
                 AsyncStorage.getItem(TRAITS_PREFIX + c.id),
                 AsyncStorage.getItem(`halochat_avatar_${c.id}`),
+                AsyncStorage.getItem(RESPONSE_STYLE_PREFIX + c.id),
               ]);
               const notes: string[] = memRes.ok ? await memRes.json() : [];
               const traits: string[] = traitsRaw ? JSON.parse(traitsRaw) : [];
               const avatarId = c.avatarId || avatarIdStored || undefined;
-              return { ...dbToCompanion(c, notes, traits), streak, pinned: pinVal === "1", avatarId };
+              const responseStyle: ResponseStyle = rsRaw === "brief" || rsRaw === "deep" ? rsRaw : "balanced";
+              return { ...dbToCompanion(c, notes, traits), streak, pinned: pinVal === "1", avatarId, responseStyle };
             } catch {
               return dbToCompanion(c, []);
             }
@@ -325,6 +333,11 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   const setUserName = useCallback(async (name: string) => {
     setUserNameState(name);
     await AsyncStorage.setItem(USER_NAME_KEY, name);
+  }, []);
+
+  const setCompanionResponseStyle = useCallback(async (id: string, style: ResponseStyle) => {
+    await AsyncStorage.setItem(RESPONSE_STYLE_PREFIX + id, style);
+    setCompanions((prev) => prev.map((c) => c.id === id ? { ...c, responseStyle: style } : c));
   }, []);
 
   const createCompanion = useCallback(
@@ -626,6 +639,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         updateRelationshipLevel,
         addMemoryNote,
         removeMemoryNote,
+        setCompanionResponseStyle,
         clearMessages,
         isLoaded,
         loadError,

@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 
 import { getAvatarById } from "@/constants/avatars";
-import { API_BASE, COMPANION_TRAITS, COMPANION_TYPES, useCompanions } from "@/context/CompanionContext";
+import { API_BASE, COMPANION_TRAITS, COMPANION_TYPES, type ResponseStyle, useCompanions } from "@/context/CompanionContext";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { hapticsNotification } from "@/utils/haptics";
@@ -47,7 +47,7 @@ export default function ProfileScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { companions, updateCompanion, deleteCompanion, clearMessages } = useCompanions();
+  const { companions, updateCompanion, deleteCompanion, clearMessages, setCompanionResponseStyle } = useCompanions();
   const { authFetch } = useAuth();
 
   const companion = companions.find((c) => c.id === id);
@@ -492,6 +492,48 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={15} color={colors.mutedForeground} />
           </Pressable>
 
+          {/* ── Response Style ── */}
+          <View style={[styles.rsWrap, { borderBottomColor: "rgba(180,160,140,0.25)" }]}>
+            <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>RESPONSE STYLE</Text>
+            <View style={styles.rsChipRow}>
+              {(["brief", "balanced", "deep"] as ResponseStyle[]).map((style) => {
+                const active = companion.responseStyle === style;
+                const labels: Record<ResponseStyle, string> = { brief: "Brief", balanced: "Balanced", deep: "Deep" };
+                return (
+                  <Pressable
+                    key={style}
+                    onPress={() => setCompanionResponseStyle(companion.id, style)}
+                    style={({ pressed }) => [
+                      styles.rsChip,
+                      { borderColor: active ? companion.avatarGradient[0] : "rgba(180,160,140,0.35)", overflow: "hidden" as const, opacity: pressed ? 0.75 : 1 },
+                    ]}
+                  >
+                    {active ? (
+                      <LinearGradient
+                        colors={companion.avatarGradient}
+                        style={StyleSheet.absoluteFill}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                      />
+                    ) : (
+                      <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(255,250,242,0.55)" }]} />
+                    )}
+                    <Text style={[styles.rsChipText, { color: active ? "#fff" : colors.foreground }]}>
+                      {labels[style]}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={[styles.rsDetail, { color: colors.mutedForeground }]}>
+              {companion.responseStyle === "brief"
+                ? "Short & punchy — gets to the point"
+                : companion.responseStyle === "deep"
+                ? "Long & emotionally rich responses"
+                : "Natural and warm, just enough"}
+            </Text>
+          </View>
+
           {/* ── Mood this week ── */}
           {moodHistory.length > 0 && (
             <View style={[styles.moodWrap, { borderBottomColor: "rgba(180,160,140,0.25)" }]}>
@@ -809,6 +851,25 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   traitPillText: { fontSize: 13, fontFamily: "Inter_500Medium" },
+
+  // Response style
+  rsWrap: {
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    gap: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  rsChipRow: { flexDirection: "row", gap: 8 },
+  rsChip: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  rsChipText: { fontSize: 13, fontFamily: "Inter_500Medium" },
+  rsDetail: { fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "center" },
 
   // Mood
   moodWrap: {
