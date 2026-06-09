@@ -26,6 +26,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/context/AuthContext";
 import { API_BASE, COMPANION_TYPES, useCompanions } from "@/context/CompanionContext";
+import { AvatarImage } from "@/components/AvatarImage";
 
 type CallPhase =
   | "connecting"
@@ -486,6 +487,7 @@ export default function CallScreen() {
           userGender: user?.gender || undefined,
           companionName: companion.name,
           memoryNotes: companion.memoryNotes,
+          traits: companion.traits?.length ? companion.traits : undefined,
           customPersonality: companion.customPersonality,
           relationshipLevel: companion.relationshipLevel,
           messages: [...transcriptRef.current],
@@ -738,9 +740,22 @@ export default function CallScreen() {
             userName: user?.name || null,
           }),
         });
-        const data = (await res.json()) as { facts?: string[] };
-        for (const fact of data.facts ?? []) {
-          if (fact.trim()) await addMemoryNote(companion.id, fact);
+        const data = (await res.json()) as {
+          facts?: string[];
+          emotions?: string[];
+          topics?: string[];
+          moments?: string[];
+          strengths?: string[];
+        };
+        const notes = [
+          ...(data.facts     ?? []).map((f) => `[FACT] ${f}`),
+          ...(data.emotions  ?? []).map((e) => `[EMOTION] ${e}`),
+          ...(data.topics    ?? []).map((t) => `[TOPIC] ${t}`),
+          ...(data.moments   ?? []).map((m) => `[MOMENT] ${m}`),
+          ...(data.strengths ?? []).map((s) => `[STRENGTH] ${s}`),
+        ];
+        for (const note of notes) {
+          if (note.trim().length > 8) await addMemoryNote(companion.id, note);
         }
       } catch { /* silent */ }
     },
@@ -858,14 +873,12 @@ export default function CallScreen() {
           ]}
         />
         <Animated.View style={(phase === "connecting" || phase === "thinking") ? connectingStyle : undefined}>
-          <LinearGradient
-            colors={companion.avatarGradient}
-            style={styles.avatar}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <Text style={styles.avatarInitials}>{initials}</Text>
-          </LinearGradient>
+          <AvatarImage
+            avatarId={companion.avatarId}
+            gradient={companion.avatarGradient}
+            name={companion.name}
+            size={140}
+          />
         </Animated.View>
       </View>
 

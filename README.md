@@ -1,35 +1,94 @@
 # HaloChat — AI Companion App
 
-HaloChat is a mobile app that lets you build meaningful relationships with personalised AI companions. Each companion has a distinct personality, remembers what you share, adapts its tone as the relationship deepens, and can chat or voice call with you in real time.
+HaloChat is an iOS app that lets you build meaningful relationships with personalised AI companions. Each companion has a distinct personality, voice, and style — it remembers what you share, evolves its tone as the relationship deepens, and is always available to chat or voice call.
 
 ---
 
-## Recent Changes (v1.1)
+## Recent Changes (v2.0 — June 2026)
 
-- **Dynamic AI response length** — Reply length scales with the user's message length: 1–2 sentences for short inputs, 2–3 for medium, 3–6 for long; `maxTokens` adjusted accordingly (200 / 350 / 700)
-- **Companion waiting indicator** — After 4 hours of inactivity, companion cards show a pulsing olive dot + "thinking of you" text to encourage re-engagement
-- **Per-companion voice selection** — Voice picker in the Create Companion screen filters voices by companion gender; each option has a play-preview button that streams a type-specific TTS sample
-- **Mood tracking** — On leaving a chat after ≥1 exchange, a mood check-in sheet appears (5-emoji scale); 7-day mood history sparkline shown in companion profile
-- **Keyboard-aware layouts** — Chat input bar and Create Companion footer animate with the keyboard via `useReanimatedKeyboardAnimation` so the text field and submit button are never hidden behind the keyboard
-- **Animated loading screen** — Full-screen launch screen featuring the app icon, "HaloChat" title, and cycling role tagline ("Friend / Lover / Therapist / Supporter") with smooth fade+slide transitions; pulsing loading dots in brand colour
-- **First-launch 3.5s splash** — New installs hold the loading screen for 3.5 seconds (via `AsyncStorage` flag) so users experience the branding; subsequent launches skip straight to the app
-- **ESLint clean** — All 43 lint problems resolved (13 unescaped-entity errors, 30 warnings including unused imports/vars, exhaustive-deps suppressions for Reanimated shared values, and import order fixes)
-- **Project documentation** — Added detailed App Description section to PROJECT_DOCUMENTATION.md covering user flows, companion types, and system architecture
-- **Legal documents** — Added `docs/PRIVACY_POLICY.md` and `docs/TERMS_AND_CONDITIONS.md` for App Store publishing
-- **Language style mirroring** — Companions now detect and mirror Romanized Telugu (Tenglish), Hinglish, or any transliterated Indian language blend the user writes in; pure English input still gets pure English replies
+### Breathing Pattern
+
+- **4-4-4 pattern** — Breathing exercise changed to equal-ratio box breathing (inhale 4s, hold 4s, exhale 4s); subtitle, in-session pattern chip, and actual timer all consistent
+
+### Explore Screen
+- **Staggered card entrance** — Personality cards spring in from below with 90 ms staggered delays (index × 90 ms) on mount, giving the screen a premium reveal feel
+- **Animated header** — Header fades + slides down on mount
+- **Pulsing hint** — "Tap a card to begin" breathes with a looping opacity animation instead of being static text
+- **"Best for" line** — Each card now shows a one-line contextual descriptor ("When you need to vent", "When you want realness", etc.) below the tagline
+- **"Help me choose" panel** — New "Not sure? Help me choose →" trigger below the cards; expands a floating panel with 4 plain-language option rows (one per type) that each route directly to `/create?type=X`; panel is absolutely positioned so it never changes card size; cards dim and become non-interactive while the panel is open
+
+### Create Wizard
+- **Slide transition** — Steps slide left/right (direction-aware) as the user navigates forward and back, instead of the previous opacity-only fade
+- **Segmented progress indicator** — The thin bar is replaced with individual pill segments per step; the active step's name label appears below its segment
+- **Waveform animation** — Voice preview cards show 5 animated bars during audio playback instead of a static stop icon
+- **"✨ Surprise me" button** — Randomly selects 3 traits in the Vibe step
+- **Voice descriptors** — Each voice card shows a one-word descriptor (Warm, Bright, Mellow, Deep, Crisp, Rich) so users know what to expect before previewing
+- **Type auto-advance** — Selecting a personality type in the wizard auto-advances to the next step after 220 ms (saves a tap)
+- **Name character counter** — Shows "12 / 30" right-aligned below the input as the user types; turns accent colour near the 30-character limit
+- **Preview hero breathes** — The companion hero card on the Preview step gently pulses with a 1.2 % scale animation
+- **Single back button** — Removed the redundant back arrow in the footer; back navigation is handled by the header chevron only
+- **Gender-strict avatar filter** — Avatar picker now shows only the gender-matching avatars (male → 4M, female → 4F); non-binary and unset show all 8; switching gender resets the selected avatar
+- **Voice "Continue" button** — The Next button on the Voice step always shows "Continue" (not "Skip") since a default voice is always pre-selected
+- **`autoCapitalize="words"`** on the name input
+
+### Visual Polish
+- **`label` colour token** — New `colors.label` (`#7A6252` light / `#C4A898` dark) — warmer and slightly richer than `mutedForeground`; applied to eyebrow text ("Create a companion"), step hints, step counter, pulsing hint, and "Help me choose" trigger
+
+### Previous (v1.9)
+
+- **"Halo" ambient background** — Global animated background rendered at z-index −1 behind every screen via `HaloBackground` in root layout. Four slowly-breathing gradient orbs (one per companion type: rose, sage, violet, amber) independently scale (0.88 → 1.12) and fade with staggered delays so they are never in sync. Dark mode gets 60 % opacity.
+
+### Previous (v1.8)
+
+- **Chat bubbles** — User bubble uses companion gradient; companion bubble uses ultra-light gradient tint (~5 % opacity wash); companion mini-avatar shows real photo; softer shadows, larger radii
+- **TypeCard** — Full gradient background card with large emoji, white text, premium shadow; affects Explore + Create wizard type step
+- **Explore screen** — Full-width TypeCards; "Who do you need right now?" header
+- **Settings** — Gradient icon circles; profile card has gradient header strip + avatar overlap
+- **Create wizard** — Larger step question (26 px), centered input with shadow, premium gender cards and trait chips with shadows
+
+### Previous (v1.7)
+
+- **CompanionCard** — Full-bleed portrait photo in 2-column grid; name/type overlaid on dark gradient; bond bar + streak/waiting indicators
+- **Home screen** — Greeting header (Good morning/evening), 2-column FlatList grid, gradient add button
+- **Activities screen** — Cards with soft gradient tint, gradient icon with shadow, duration/streak/done pills, compact progress pill in header
+
+### Previous (v1.6)
+
+- **Replika-style profile page** — Avatar fills top 62 % of screen; name, type badge, and edit button overlaid on gradient-darkened bottom; scrollable stats/memories/mood/actions below
+- **Create wizard avatar picker** — Large swipe-to-browse portrait cards with gender-filtered display
+
+### Previous (v1.5)
+
+- **Uplift companion type** — Replaced Motivator with Uplift (self-affirmation, violet→pink gradient, ✨); detects and reframes inner-critic language; voice: shimmer
+- **`[STRENGTH]` memory category** — 5th memory type (bond weight +5); highlights acts of courage and resilience; surfaced when user is doubting themselves
+- **Affirmation Builder activity** — User fills 3 prompts; companion generates 3 personalised affirmations in gradient cards
+
+### Previous (v1.4)
+
+- **Avatar system** — `constants/avatars.ts` defines 8 avatar slots (4F, 4M); `components/AvatarImage.tsx` is the single display component used across all screens; "Face" step in create wizard with swipeable portrait cards; `avatarId` stored per-companion
+
+### Previous (v1.3)
+
+- **Personality Evolution** — Bond milestones (20/40/60/80) show an animated celebration card with unlocked-behavior reveal; companion sends an in-chat acknowledgment in its own voice; fires once per tier
+
+### Previous (v1.2)
+
+- **Activities tab** — Dedicated bottom nav tab with 5 daily wellbeing practices (Check-in, Breathing, Journal, Gratitude, Goal Check-in); per-day completion + streak tracking in AsyncStorage
+- **Deep Memory system** — Notes categorised into `[FACT]`, `[EMOTION]`, `[TOPIC]`, `[MOMENT]`, `[STRENGTH]`; bond weights vary by category; grouped block injected into every system prompt
+- **Memories screen** — Colour-coded categorical sections with icon, colour, and count badge
+
+### Previous (v1.1)
+
+- **Dynamic AI response length** — Reply length scales with message length (short/medium/long inputs → 1–2 / 2–3 / 3–6 sentence replies)
+- **Companion waiting indicator** — Pulsing olive dot after 4 h inactivity
+- **Per-companion voice selection** — Voice picker with gender filter and live audio preview
+- **Mood tracking** — 5-emoji check-in on chat exit; 7-day sparkline in companion profile
+- **Keyboard-aware layouts** — Chat input and wizard footer animate with the keyboard
+- **Animated loading screen** — App icon, title, and cycling role tagline on launch
 
 ### Previous (v1.0)
 
-- **Username uniqueness** — Real-time availability check on signup with debounced `GET /auth/check-username`; inline green/red feedback before form submission
-- **Name collected in onboarding** — Removed name field from signup; onboarding flow collects display name (required) then routes to companion creation
-- **Onboarding back button** — Create screen back button falls back to `/(tabs)` when there is no navigation history (post-onboarding)
-- **Error/offline state** — Home screen shows a "Couldn't connect" retry screen when the API is unreachable instead of a misleading empty state
-- **Memory notes reliability** — `addMemoryNote` / `removeMemoryNote` use optimistic updates with server rollback on failure
-- **Cron job idempotency** — Check-in job uses an `isRunning` guard and marks the DB record before sending the push (at-most-once delivery)
-- **Call screen loading state** — Avatar pulses during `connecting` and `thinking` phases
-- **Memory crash fixes** — Removed `reactCompiler: true` from app.json; `isAliveRef` set immediately on call end to prevent dangling audio objects
-- **Light theme default** — App defaults to light theme on first install
-- **Test suite** — All 161 tests pass (119 API server + 42 mobile)
+- Username uniqueness check, name collection in onboarding, offline error state, memory optimistic updates, cron job idempotency, call screen loading state, light theme default, 161-test suite
 
 ---
 
@@ -46,14 +105,16 @@ HaloChat is a mobile app that lets you build meaningful relationships with perso
 9. [Screens & Navigation](#screens--navigation)
 10. [State Management](#state-management)
 11. [Companion Personalities](#companion-personalities)
-12. [Voice Call Architecture](#voice-call-architecture)
-13. [Memory System](#memory-system)
-14. [Relationship Progression](#relationship-progression)
-15. [Push Notifications](#push-notifications)
-16. [Authentication](#authentication)
-17. [Content Safety](#content-safety)
-18. [Rate Limiting & Usage Caps](#rate-limiting--usage-caps)
-19. [Deployment](#deployment)
+12. [Avatar System](#avatar-system)
+13. [Activities System](#activities-system)
+14. [Voice Call Architecture](#voice-call-architecture)
+15. [Memory System](#memory-system)
+16. [Relationship Progression](#relationship-progression)
+17. [Push Notifications](#push-notifications)
+18. [Authentication](#authentication)
+19. [Content Safety](#content-safety)
+20. [Rate Limiting & Usage Caps](#rate-limiting--usage-caps)
+21. [Deployment](#deployment)
 
 ---
 
@@ -61,23 +122,27 @@ HaloChat is a mobile app that lets you build meaningful relationships with perso
 
 | Feature | Description |
 |---|---|
-| **8 Companion Personalities** | Romantic, Flirty, Supportive, Best Friend, Mentor, Anime, Therapist, Roleplay — each with a distinct voice, tone, and system prompt |
-| **Streaming Chat** | Responses stream token-by-token via SSE; multi-part replies shown with typing indicator between each part |
-| **Dynamic Response Length** | AI reply length mirrors the user's message length — short input gets a short reply; long input gets a fuller response |
+| **4 Companion Personalities** | Romantic, Supportive, Uplift, Best Friend — each with a distinct voice, gradient, and system prompt |
+| **Streaming Chat** | Responses stream token-by-token via SSE; multi-part replies shown with typing indicator between parts |
+| **Dynamic Response Length** | AI reply length mirrors the user's message — short input gets a short reply; long input gets a fuller response |
 | **Voice Calls** | Full turn-based voice loop: record speech → Whisper transcription → AI reply → TTS playback → repeat |
 | **Voice Messages** | In-chat audio recording sent to Whisper; transcript sent as a text message |
-| **Per-Companion Voice** | Select a TTS voice during companion creation; voices filtered by companion gender with live audio preview |
-| **Companion Memory** | Facts extracted automatically from conversations and injected into future system prompts |
-| **Mood Tracking** | Mood check-in (5-emoji scale) on chat exit; 7-day mood history shown in companion profile |
-| **Waiting Indicator** | Companion cards show a pulsing dot after 4h inactivity to prompt re-engagement |
-| **Relationship Progression** | Bond score (0–100) grows with meaningful exchanges; shifts companion tone through 5 tiers |
-| **Push Notifications** | Companions send personalised check-ins when you've been away 4+ hours |
-| **Age-Aware Responses** | Strict mode for users ≤19; relaxed mode for users ≥25 |
+| **Per-Companion Voice** | Select a TTS voice (Nova, Shimmer, Fable, Onyx, Echo, Alloy) during creation; voices filtered by companion gender with live audio preview |
+| **Deep Memory** | Notes extracted into 5 categories (Facts, Emotions, Topics, Moments, Strengths) with weighted bond increments; rich grouped block injected into every system prompt |
+| **Activities Tab** | 3 streak-tracked daily practices (Breathing 4-4-4, Journal Prompt, Gratitude) + Mood Canvas (2D colour-gradient drag to one of 9 named emotional states, shareable with a companion) |
+| **Avatar System** | 8 pre-bundled face portraits (4F, 4M); gender-filtered picker in the create wizard; graceful gradient-circle fallback |
+| **Mood Tracking** | 5-emoji check-in on chat exit; 7-day mood history sparkline in companion profile |
+| **Relationship Progression** | Bond score (0–100) grows with meaningful exchanges; shifts companion tone through 5 tiers (New → Acquaintance → Friends → Close → Bonded) |
+| **Personality Evolution** | Milestone celebrations at bond 20/40/60/80 with unlocked-behavior reveal; companion sends in-chat acknowledgment; fires once per tier |
+| **Waiting Indicator** | Companion cards show a pulsing dot after 4 h inactivity to prompt re-engagement |
+| **Push Notifications** | Personalised check-ins when away 4+ hours (local scheduled + server cron via Expo push) |
+| **Age-Aware Responses** | Strict content mode for users ≤19; relaxed mode for users ≥25 |
 | **Daily Usage Limits** | Per-user per-companion request caps tracked in the database for cost control |
 | **Multi-Auth** | Email/password, Apple Sign-In, Google OAuth; JWT access + refresh token rotation |
 | **Password Reset** | Secure email-based reset flow via Resend |
 | **Message Search** | Full-text search through conversation history |
 | **Streak System** | Daily consecutive-use tracking per companion |
+| **HaloBackground** | Ambient animated gradient orbs rendered behind every screen for a living, atmospheric feel |
 
 ---
 
@@ -89,13 +154,16 @@ HaloChat is a mobile app that lets you build meaningful relationships with perso
 |---|---|
 | Framework | React Native 0.81 + Expo SDK 54 |
 | Navigation | Expo Router v6 (file-based, similar to Next.js) |
-| UI Animations | React Native Reanimated 4 |
-| Gestures | React Native Gesture Handler |
+| UI Animations | React Native Reanimated 4 (JSI, 60 fps) |
+| Gestures | React Native Gesture Handler 2.28 |
 | Keyboard | react-native-keyboard-controller |
 | Audio | expo-av (recording + playback) |
+| Images | expo-image (fast cached image component) |
+| Gradients | expo-linear-gradient |
+| Haptics | expo-haptics |
 | Notifications | expo-notifications |
 | Secure Storage | expo-secure-store (iOS Keychain / Android Keystore) |
-| Local Storage | AsyncStorage |
+| Local Storage | @react-native-async-storage/async-storage |
 | Type Validation | Zod |
 | Language | TypeScript 5.9 |
 
@@ -123,8 +191,8 @@ HaloChat is a mobile app that lets you build meaningful relationships with perso
 |---|---|
 | `@workspace/db` | Drizzle ORM schema + connection pool |
 | `@workspace/api-zod` | Shared Zod validation schemas |
-| `@workspace/api-spec` | API type definitions |
-| `@workspace/api-client-react` | Typed React hooks (TanStack Query) |
+| `@workspace/api-spec` | API type definitions (orval codegen) |
+| `@workspace/api-client-react` | Typed React hooks (TanStack Query v5) |
 | `@workspace/integrations-openai-ai-server` | OpenAI integration utilities |
 
 ---
@@ -134,65 +202,99 @@ HaloChat is a mobile app that lets you build meaningful relationships with perso
 ```
 Halo-Chat/
 ├── artifacts/
-│   ├── halochat/                    # Expo mobile application
-│   │   ├── app/                     # Expo Router screens (file-based routes)
-│   │   │   ├── _layout.tsx          # Root layout — providers, theme
-│   │   │   ├── index.tsx            # Root redirect (auth check)
-│   │   │   ├── onboarding.tsx       # First-launch onboarding flow
-│   │   │   ├── create.tsx           # Companion creation
+│   ├── halochat/                        # Expo mobile application
+│   │   ├── app/                         # Expo Router screens (file-based routes)
+│   │   │   ├── _layout.tsx              # Root layout — providers, HaloBackground, theme
+│   │   │   ├── index.tsx                # Root redirect (auth check)
+│   │   │   ├── onboarding.tsx           # First-launch onboarding flow
+│   │   │   ├── create.tsx               # Companion creation wizard (7-step)
 │   │   │   ├── (tabs)/
-│   │   │   │   ├── index.tsx        # Companions list (home)
-│   │   │   │   ├── explore.tsx      # Explore companion types
-│   │   │   │   └── settings.tsx     # User settings
+│   │   │   │   ├── _layout.tsx          # Tab bar definition
+│   │   │   │   ├── index.tsx            # Companions list (home)
+│   │   │   │   ├── explore.tsx          # Explore & choose companion type
+│   │   │   │   ├── activities.tsx       # Daily activities hub
+│   │   │   │   └── settings.tsx         # User settings & preferences
 │   │   │   ├── auth/
 │   │   │   │   ├── login.tsx
 │   │   │   │   ├── signup.tsx
 │   │   │   │   ├── forgot-password.tsx
 │   │   │   │   └── reset-password.tsx
-│   │   │   ├── chat/[id].tsx        # Chat screen
-│   │   │   ├── call/[id].tsx        # Voice call screen
-│   │   │   ├── profile/[id].tsx     # Companion profile & edit
-│   │   │   └── memories/[id].tsx    # Memory notes viewer
-│   │   ├── components/              # Reusable UI components
-│   │   │   └── ChatBubble.tsx
+│   │   │   ├── activity/
+│   │   │   │   └── [type].tsx           # Individual activity screen (breathing, journal, etc.)
+│   │   │   ├── chat/[id].tsx            # Chat screen
+│   │   │   ├── call/[id].tsx            # Voice call screen
+│   │   │   ├── profile/[id].tsx         # Companion profile & editor
+│   │   │   └── memories/[id].tsx        # Memory notes viewer
+│   │   │
+│   │   ├── components/
+│   │   │   ├── AvatarImage.tsx          # Single avatar display component (photo or gradient fallback)
+│   │   │   ├── ChatBubble.tsx           # Gradient chat bubble with avatar
+│   │   │   ├── CompanionCard.tsx        # Home screen companion grid card
+│   │   │   ├── HaloBackground.tsx       # Ambient animated gradient orbs (rendered behind all screens)
+│   │   │   ├── KeyboardAwareScrollViewCompat.tsx
+│   │   │   ├── MoodCanvas.tsx           # Bilinear mood drag canvas
+│   │   │   └── TypeBadge.tsx            # Personality type card/badge
+│   │   │
+│   │   ├── constants/
+│   │   │   ├── avatars.ts               # 8 avatar definitions (id, gender, label, source)
+│   │   │   └── colors.ts                # Full light/dark colour palette including label token
+│   │   │
 │   │   ├── context/
-│   │   │   ├── AuthContext.tsx      # Auth state, token lifecycle
-│   │   │   ├── CompanionContext.tsx  # Companions, messages, memory
-│   │   │   └── ThemeContext.tsx     # Light/dark theme
+│   │   │   ├── AuthContext.tsx          # Auth state, token lifecycle
+│   │   │   ├── CompanionContext.tsx     # Companions, messages, memory, COMPANION_TYPES map
+│   │   │   └── ThemeContext.tsx         # Light/dark theme preference
+│   │   │
 │   │   ├── hooks/
-│   │   │   └── useColors.ts        # Theme-aware color palette
+│   │   │   └── useColors.ts             # Theme-aware colour palette hook
+│   │   │
 │   │   ├── utils/
-│   │   │   ├── chatUtils.ts        # Message splitting, mood detection, date formatting
-│   │   │   ├── haptics.ts          # Haptic feedback wrappers
-│   │   │   └── notifications.ts    # Push notification scheduling
+│   │   │   ├── chatUtils.ts             # Message splitting, mood detection, date formatting
+│   │   │   ├── haptics.ts               # Haptic feedback wrappers
+│   │   │   └── notifications.ts         # Push notification scheduling
+│   │   │
 │   │   ├── assets/
-│   │   ├── app.json                # Expo configuration
-│   │   └── ios/                    # Xcode project (native iOS)
+│   │   │   ├── avatars/                 # PNG face portraits (f1–f4, m1–m4)
+│   │   │   └── backgrounds/             # Background assets
+│   │   │
+│   │   ├── metro.config.js              # pnpm symlink resolver (extraNodeModules)
+│   │   ├── app.json                     # Expo configuration (newArchEnabled: true)
+│   │   └── ios/                         # Xcode project (native iOS)
 │   │
-│   └── api-server/                 # Express API server
+│   └── api-server/                      # Express API server
 │       └── src/
-│           ├── index.ts            # Entry point — mounts routes & middleware
+│           ├── index.ts                 # Entry point — mounts routes & middleware
 │           ├── routes/
-│           │   ├── auth.ts         # Authentication endpoints
-│           │   ├── companion.ts    # AI chat, TTS, transcription
-│           │   ├── companions-db.ts # Companion CRUD & messages
-│           │   └── notifications.ts # Push token management
+│           │   ├── auth.ts              # Authentication endpoints
+│           │   ├── companion.ts         # AI chat, TTS, transcription, memory extraction
+│           │   ├── companions-db.ts     # Companion CRUD, messages, mood logs
+│           │   └── notifications.ts     # Push token registration
 │           ├── middleware/
-│           │   ├── auth.ts         # requireAuth (JWT validation)
-│           │   ├── dailyLimit.ts   # Per-companion daily request cap
-│           │   └── rateLimits.ts   # Per-endpoint rate limiters
+│           │   ├── auth.ts              # requireAuth (JWT validation)
+│           │   ├── dailyLimit.ts        # Per-companion daily request cap
+│           │   └── rateLimits.ts        # Per-endpoint rate limiters
 │           ├── jobs/
-│           │   └── checkin.ts      # Hourly check-in notification cron
+│           │   └── checkin.ts           # Hourly check-in notification cron
 │           └── lib/
-│               ├── logger.ts       # Pino logger
-│               ├── email.ts        # Resend email templates
-│               └── push.ts         # Expo Server SDK wrapper
+│               ├── logger.ts            # Pino logger
+│               ├── email.ts             # Resend email templates
+│               └── push.ts             # Expo Server SDK wrapper
 │
-└── lib/                            # Shared workspace packages
-    ├── db/src/schema/index.ts      # Drizzle table definitions
-    ├── api-zod/
-    ├── api-spec/
-    └── api-client-react/
+├── lib/                                 # Shared workspace packages
+│   ├── db/src/schema/index.ts           # Drizzle table definitions (single source of truth)
+│   ├── api-zod/
+│   ├── api-spec/
+│   └── api-client-react/
+│
+├── docs/
+│   ├── PROJECT_DOCUMENTATION.md        # Business case, personas, marketing, roadmap
+│   ├── PRIVACY_POLICY.md               # GDPR/CCPA-compliant privacy policy
+│   └── TERMS_AND_CONDITIONS.md         # App Store T&C, age-gating, disclaimers
+│
+├── README.md                            # This file
+├── replit.md                            # Quick developer reference
+├── package.json                         # Root workspace config
+├── pnpm-workspace.yaml                  # pnpm workspace + version catalog
+└── railway.toml                         # Railway Docker deployment config
 ```
 
 ---
@@ -200,38 +302,47 @@ Halo-Chat/
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Expo Mobile App                      │
-│  AuthContext ─── CompanionContext ─── ThemeContext      │
-│       │                 │                               │
-│  Secure Store      AsyncStorage                        │
-└──────────────────────┬──────────────────────────────────┘
-                       │ HTTPS / SSE / XHR
-┌──────────────────────▼──────────────────────────────────┐
-│                  Express API Server                     │
-│  ┌──────────┐  ┌──────────┐  ┌───────────┐            │
-│  │   Auth   │  │  Chat    │  │ Companions │            │
-│  │  Routes  │  │  Routes  │  │   Routes  │            │
-│  └────┬─────┘  └────┬─────┘  └─────┬─────┘            │
-│       │             │              │                    │
-│  ┌────▼─────────────▼──────────────▼─────┐             │
-│  │           Middleware Layer            │             │
-│  │  requireAuth │ dailyLimit │ rateLimit │             │
-│  └────────────────────┬──────────────────┘             │
-│                       │                                 │
-│  ┌────────────────────▼──────────────────┐             │
-│  │         Drizzle ORM + PostgreSQL      │             │
-│  └───────────────────────────────────────┘             │
-│                                                         │
-│  Background: node-cron hourly check-in job             │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-          ┌────────────▼───────────┐
-          │      OpenAI APIs       │
-          │  GPT-4o-mini (chat)    │
-          │  TTS-1 (voice)         │
-          │  Whisper-1 (transcribe)│
-          └────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                      Expo Mobile App                        │
+│                                                             │
+│  ┌─────────────┐  ┌──────────────────┐  ┌───────────────┐  │
+│  │ AuthContext │  │ CompanionContext  │  │ ThemeContext   │  │
+│  │  JWT tokens │  │ companions, msgs  │  │ light / dark   │  │
+│  │ Keychain    │  │ memory, bond      │  │ AsyncStorage   │  │
+│  └─────────────┘  └──────────────────┘  └───────────────┘  │
+│                                                             │
+│  Screens: home, explore, chat, call, profile, activities    │
+│  HaloBackground (z-index -1, behind every screen)           │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ HTTPS / SSE
+┌──────────────────────────▼──────────────────────────────────┐
+│                    Express API Server                       │
+│                                                             │
+│  ┌──────────┐  ┌───────────────┐  ┌──────────────────────┐  │
+│  │  Auth    │  │  Companion    │  │   Companions (CRUD)  │  │
+│  │  Routes  │  │  AI Routes    │  │   + Messages/Mood    │  │
+│  └────┬─────┘  └──────┬────────┘  └──────────┬───────────┘  │
+│       │               │                       │              │
+│  ┌────▼───────────────▼───────────────────────▼──────────┐  │
+│  │              Middleware Layer                          │  │
+│  │   requireAuth  │  dailyLimit  │  rateLimits            │  │
+│  └──────────────────────────┬─────────────────────────────┘  │
+│                             │                                │
+│  ┌──────────────────────────▼─────────────────────────────┐  │
+│  │            Drizzle ORM + PostgreSQL                    │  │
+│  │   users │ companions │ messages │ memory_notes         │  │
+│  │   mood_logs │ daily_usage                              │  │
+│  └────────────────────────────────────────────────────────┘  │
+│                                                             │
+│  Background: node-cron hourly check-in job                  │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+              ┌────────────▼───────────┐
+              │      OpenAI APIs       │
+              │  GPT-4o-mini  (chat)   │
+              │  TTS-1        (voice)  │
+              │  Whisper-1    (stt)    │
+              └────────────────────────┘
 ```
 
 ---
@@ -257,7 +368,7 @@ pnpm install
 cp artifacts/api-server/.env.example artifacts/api-server/.env
 ```
 
-Fill in these required values (see [Environment Variables](#environment-variables) for the full list):
+Fill in the required values:
 
 ```env
 DATABASE_URL=postgresql://user:password@localhost:5432/halochat
@@ -265,16 +376,23 @@ OPENAI_API_KEY=sk-...
 JWT_SECRET=<random 64-char string>
 JWT_REFRESH_SECRET=<different random 64-char string>
 PORT=3000
+RESEND_API_KEY=re_...
+FROM_EMAIL=noreply@yourdomain.com
 ```
 
 ### 3. Run database migrations
 
 ```bash
-# From the repo root, using the public DATABASE_URL
 DATABASE_URL="postgresql://..." pnpm run push
 ```
 
-### 4. Start the API server
+### 4. Start the API server (dev mode with watch)
+
+```bash
+pnpm --filter @workspace/api-server run dev
+```
+
+Or build + run in production mode:
 
 ```bash
 cd artifacts/api-server
@@ -282,7 +400,7 @@ pnpm run build
 node --env-file=.env --enable-source-maps dist/index.mjs
 ```
 
-The server starts on `http://localhost:3000`. Verify with:
+Verify with:
 
 ```bash
 curl http://localhost:3000/api/healthz
@@ -292,10 +410,10 @@ curl http://localhost:3000/api/healthz
 
 ```bash
 # artifacts/halochat/.env
-EXPO_PUBLIC_DOMAIN=http://<your-local-ip>:3000
+EXPO_PUBLIC_DOMAIN=http://<your-local-network-ip>:3000
 ```
 
-Use your machine's local network IP (not `localhost`) so the device/simulator can reach the server.
+Use your machine's local network IP (not `localhost`) — the physical device cannot reach `localhost` on the host machine.
 
 ### 6. Start the Expo app
 
@@ -305,12 +423,14 @@ cd artifacts/halochat
 # iOS Simulator
 pnpm exec expo run:ios
 
-# Physical iPhone (Xcode)
+# Physical iPhone (recommended for audio features)
 pnpm exec expo run:ios --device
 
 # Android
 pnpm exec expo run:android
 ```
+
+> **Note:** `expo-speech` and other native modules require a native build (`expo run:ios`). They will not work in Expo Go.
 
 ---
 
@@ -325,8 +445,8 @@ pnpm exec expo run:android
 | `JWT_SECRET` | Yes | Secret for signing access tokens (15-min expiry) |
 | `JWT_REFRESH_SECRET` | Yes | Secret for signing refresh tokens (30-day expiry) |
 | `PORT` | Yes | Server port (e.g. `3000`) |
-| `RESEND_API_KEY` | Yes (email) | Resend API key for password reset emails |
-| `FROM_EMAIL` | Yes (email) | Sender address (e.g. `noreply@yourdomain.com`) |
+| `RESEND_API_KEY` | Yes | Resend API key for password reset emails |
+| `FROM_EMAIL` | Yes | Sender address (e.g. `noreply@yourdomain.com`) |
 | `APP_SCHEME` | No | Deep link scheme (e.g. `halochat`) |
 | `CORS_ORIGIN` | No | Allowed CORS origin for web clients |
 | `DAILY_COMPANION_LIMIT` | No | Max AI requests/day/companion (default: `200`) |
@@ -337,7 +457,7 @@ pnpm exec expo run:android
 
 | Variable | Required | Description |
 |---|---|---|
-| `EXPO_PUBLIC_DOMAIN` | Yes | Base URL of the API server |
+| `EXPO_PUBLIC_DOMAIN` | Yes | Base URL of the API server (e.g. `http://192.168.1.x:3000`) |
 
 ---
 
@@ -346,8 +466,6 @@ pnpm exec expo run:android
 All tables are defined in `lib/db/src/schema/index.ts` using Drizzle ORM.
 
 ### `users`
-
-Stores user accounts and authentication details.
 
 | Column | Type | Description |
 |---|---|---|
@@ -360,36 +478,33 @@ Stores user accounts and authentication details.
 | `username` | text, unique | Unique handle (set during signup) |
 | `gender` | text, nullable | User-reported gender |
 | `dateOfBirth` | text, nullable | ISO date string (used for age-aware responses) |
-| `pushToken` | text, nullable | Expo push token for notifications |
+| `pushToken` | text, nullable | Expo push token |
 | `resetTokenHash` | text, nullable | bcrypt hash of password reset token |
 | `resetTokenExpiry` | timestamp, nullable | Reset token expiry (1 hour) |
-| `refreshTokenVersion` | integer, default 1 | Increments on logout to invalidate old refresh tokens |
+| `refreshTokenVersion` | integer, default 1 | Incremented on logout to invalidate old tokens |
 | `createdAt` | timestamp | Account creation time |
 
 ### `companions`
-
-Stores AI companion profiles, one per user per companion.
 
 | Column | Type | Description |
 |---|---|---|
 | `id` | UUID (PK) | |
 | `userId` | UUID (FK → users) | Cascades on delete |
 | `name` | text | Companion display name |
-| `personality` | text | Personality type key (e.g. `romantic`) |
+| `personality` | text | Type key: `romantic`, `supportive`, `uplift`, `bestfriend` |
 | `customPersonality` | text, nullable | User-written personality override injected into system prompt |
 | `gender` | text, nullable | `male`, `female`, `nonbinary` |
-| `avatarColor` | text, default `purple` | Avatar theme key |
+| `avatarId` | text, nullable | Avatar ID from `constants/avatars.ts` (e.g. `f1`, `m3`) |
+| `avatarColor` | text, default `purple` | Avatar theme key (fallback when no avatarId) |
 | `relationshipLevel` | integer, default 0 | Bond score 0–100 |
 | `messageCount` | integer, default 0 | Total messages exchanged |
 | `lastMessage` | text, nullable | Latest message preview |
 | `lastMessageAt` | timestamp, nullable | Time of last chat activity |
-| `customVoice` | text, nullable | User-selected TTS voice override (e.g. `nova`, `onyx`) |
+| `customVoice` | text, nullable | User-selected TTS voice (e.g. `nova`, `onyx`) |
 | `lastCheckinSentAt` | timestamp, nullable | Time of last push check-in sent |
 | `createdAt` | timestamp | |
 
 ### `messages`
-
-Stores conversation history.
 
 | Column | Type | Description |
 |---|---|---|
@@ -401,38 +516,32 @@ Stores conversation history.
 
 ### `memory_notes`
 
-Stores extracted facts about the user, per companion.
-
 | Column | Type | Description |
 |---|---|---|
 | `id` | UUID (PK) | |
 | `companionId` | UUID (FK → companions) | Cascades on delete |
-| `note` | text | A single extracted fact (max 20 notes per companion) |
+| `note` | text | Extracted fact, prefixed with category tag (e.g. `[FACT]`, `[EMOTION]`, `[STRENGTH]`) |
 | `createdAt` | timestamp | |
 
 ### `mood_logs`
 
-Stores daily mood check-in values per companion.
-
 | Column | Type | Description |
 |---|---|---|
 | `id` | UUID (PK) | |
 | `companionId` | UUID (FK → companions) | Cascades on delete |
-| `date` | text | Date in `YYYY-MM-DD` UTC format |
+| `date` | text | `YYYY-MM-DD` UTC format |
 | `mood` | integer | 1–5 (😔 to 😊) |
 | `createdAt` | timestamp | |
 | — | unique | Constraint on `(companionId, date)` — upsert on re-check |
 
 ### `daily_usage`
 
-Tracks daily OpenAI request counts per user/companion for cost control.
-
 | Column | Type | Description |
 |---|---|---|
 | `id` | UUID (PK) | |
 | `userId` | UUID (FK → users) | |
 | `companionId` | UUID (FK → companions) | |
-| `date` | text | Date in `YYYY-MM-DD` UTC format |
+| `date` | text | `YYYY-MM-DD` UTC format |
 | `requests` | integer | Request count for the day |
 | — | unique | Constraint on `(userId, companionId, date)` |
 
@@ -450,7 +559,7 @@ All authenticated endpoints require `Authorization: Bearer <access_token>`.
 |--------|----------|------|-------------|
 | `POST` | `/auth/signup` | — | Register. Body: `{ email, password, username, name?, gender?, dateOfBirth? }`. Age must be ≥17. |
 | `GET` | `/auth/check-username` | — | Check availability. Query: `?username=xxx`. Returns `{ available: bool }`. |
-| `POST` | `/auth/login` | — | Login. Body: `{ identifier, password }` (identifier = email or username). Returns `{ accessToken, refreshToken, user }`. |
+| `POST` | `/auth/login` | — | Login. Body: `{ identifier, password }`. Returns `{ accessToken, refreshToken, user }`. |
 | `POST` | `/auth/apple` | — | Apple Sign-In. Body: `{ identityToken, fullName? }`. |
 | `POST` | `/auth/google` | — | Google OAuth. Body: `{ accessToken }`. |
 | `POST` | `/auth/refresh` | — | Rotate tokens. Body: `{ refreshToken }`. Returns new `{ accessToken, refreshToken }`. |
@@ -464,11 +573,11 @@ All authenticated endpoints require `Authorization: Bearer <access_token>`.
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | `GET` | `/companions` | Yes | List user's companions sorted by last activity. |
-| `POST` | `/companions` | Yes | Create. Body: `{ name, personality, customPersonality?, gender?, avatarColor?, customVoice? }`. |
-| `PATCH` | `/companions/:id` | Yes | Update name, customPersonality, customVoice, relationshipLevel, avatarColor, etc. |
+| `POST` | `/companions` | Yes | Create. Body: `{ name, personality, customPersonality?, gender?, avatarId?, avatarColor?, customVoice?, traits? }`. |
+| `PATCH` | `/companions/:id` | Yes | Update name, customPersonality, customVoice, relationshipLevel, avatarId, avatarColor, etc. |
 | `POST` | `/companions/:id/mood` | Yes | Log or update today's mood. Body: `{ date, mood }` (mood 1–5). Upserts on same day. |
 | `GET` | `/companions/:id/mood` | Yes | Fetch last 7 days of mood logs. Returns `{ logs: [{ date, mood }] }`. |
-| `DELETE` | `/companions/:id` | Yes | Delete companion and all its messages. |
+| `DELETE` | `/companions/:id` | Yes | Delete companion and all its data (messages, memory, mood logs). |
 
 ### Messages
 
@@ -490,15 +599,15 @@ All authenticated endpoints require `Authorization: Bearer <access_token>`.
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| `POST` | `/companion/chat` | Yes | **Streaming chat (SSE)**. Returns `data: { content }` events, ending with `data: [DONE]`. Rate limited: 30/min. |
+| `POST` | `/companion/chat` | Yes | **Streaming chat (SSE)**. Returns `data: { content }` events ending with `data: [DONE]`. Rate limited: 30/min. |
 | `POST` | `/companion/chat-sync` | Yes | **Synchronous chat** (JSON). Used in voice calls. Returns `{ content }`. |
 | `POST` | `/companion/summarize` | Yes | Summarise last ~20 messages into 1 sentence. Returns `{ summary }`. |
 | `POST` | `/companion/extract-memory` | Yes | Extract new facts from messages. Returns `{ facts: string[] }`. |
 | `POST` | `/companion/transcribe` | Yes | Whisper transcription. Multipart form with `audio` file field. Returns `{ transcript }`. |
 | `GET` | `/companion/tts` | Yes | OpenAI TTS audio stream (mp3). Query: `?text=<string>&voice=<voice>&companionId=<id>`. Rate limited: 20/min. |
-| `POST` | `/companion/generate-checkin` | Yes | Generate a personalised check-in push message. Used by the cron job. |
+| `POST` | `/companion/generate-checkin` | Yes | Generate a personalised check-in push message (used by cron job). |
 
-#### Chat Request Body (streaming and sync)
+#### Chat Request Body
 
 ```json
 {
@@ -507,7 +616,7 @@ All authenticated endpoints require `Authorization: Bearer <access_token>`.
   "companionGender": "female",
   "companionName": "Aria",
   "memoryNotes": ["Loves hiking", "Has a dog named Max"],
-  "customPersonality": "Optional extra instructions...",
+  "customPersonality": "Optional extra instructions",
   "relationshipLevel": 45,
   "userAge": 24,
   "userGender": "male",
@@ -537,64 +646,100 @@ All authenticated endpoints require `Authorization: Bearer <access_token>`.
 Navigation is file-based using Expo Router. The root layout checks auth state and redirects accordingly.
 
 ### Auth Flow
+
 ```
-/auth/login          → Email/username + password; Apple Sign-In button
-/auth/signup         → Registration (email, password, username, gender, DOB)
-/auth/forgot-password → Request reset email
-/auth/reset-password  → Token validation + new password
+/auth/login           → Email/username + password login; Apple Sign-In button
+/auth/signup          → Registration (email, password, username, gender, DOB)
+/auth/forgot-password → Request password reset email
+/auth/reset-password  → Token validation + new password form
 ```
 
 ### Onboarding
+
 ```
-/onboarding    → Shown once on first launch after signup.
-                 Collects the user's name (required).
-                 Redirects to /create after completion.
+/onboarding     → Shown once on first launch after signup.
+                  Collects the user's display name (required).
+                  Routes to companion creation on completion.
 ```
 
 ### Main App (Tab Navigation)
+
 ```
-/(tabs)/         → Companions list home screen
-                   - Lists all companions, sorted by recent activity
-                   - Pinned companions appear first
-                   - Search by companion name
-                   - Long-press: pin/unpin, delete
-                   - Call button shortcut
+/(tabs)/            → Home — companion grid
+                      - 2-column FlatList, sorted by last activity
+                      - Greeting header (Good morning / evening)
+                      - Pinned companions first
+                      - Search by companion name
+                      - Long-press: pin/unpin, delete
+                      - Floating call button shortcut
+                      - Waiting indicator (pulsing dot after 4 h inactivity)
 
-/(tabs)/explore  → Browse companion personality types
+/(tabs)/explore     → Choose & create a companion
+                      - 2×2 card grid for all 4 personality types
+                      - Staggered entrance animation
+                      - "Help me choose" panel for undecided users
+                      - Each card: emoji, name, tagline, "best for" line, trait pills
 
-/(tabs)/settings → User profile, theme preference, logout, delete account
+/(tabs)/activities  → Daily wellbeing hub
+                      - Activity cards with streak, duration, completion status
+                      - Overall progress indicator
+
+/(tabs)/settings    → User preferences
+                      - Profile summary with gradient header
+                      - Light/dark/system theme toggle
+                      - Notification preferences
+                      - Account management (logout, delete)
 ```
 
 ### Companion Screens
+
 ```
-/create          → Create a new companion
-                   - Pick personality type (8 options)
-                   - Set name, gender, avatar colour
-                   - Optional: custom personality override
+/create             → Companion creation wizard (6–7 steps)
+                      Steps: [Personality →] Name → Gender → Face → Vibe → Voice → Preview
+                      - Slide transition between steps
+                      - Segmented progress indicator with step labels
+                      - Type auto-advance (220 ms after selection)
+                      - Gender-filtered avatar picker (swipeable portrait cards)
+                      - Trait selection with "Surprise me" button
+                      - Voice preview with animated waveform
+                      - Preview hero with gentle breathe animation
 
-/chat/[id]       → Chat with a companion
-                   - Streaming text responses
-                   - Voice message recording
-                   - Message search
-                   - Multi-select for bulk delete
-                   - Mood indicator (emoji updates per reply)
+/chat/[id]          → Chat with a companion
+                      - SSE streaming responses
+                      - Voice message recording
+                      - Message search
+                      - Multi-select for bulk delete
+                      - Mood indicator per reply
 
-/call/[id]       → Voice call screen
-                   - Turn-based voice conversation loop
-                   - Live transcript of last 6 turns
-                   - Mic / speaker / end-call controls
-                   - Connection & thinking phase animations
+/call/[id]          → Voice call
+                      - Turn-based voice loop
+                      - Live transcript (last 6 turns)
+                      - Mic / speaker / end-call controls
+                      - Connection & thinking phase animations
 
-/profile/[id]    → Companion profile & editor
-                   - Stats: messages, relationship level, streak, created date
-                   - Edit name and custom personality
-                   - Avatar colour picker
-                   - Memory notes editor
+/profile/[id]       → Companion profile & editor
+                      - Full-bleed avatar portrait or gradient fallback
+                      - Stats: messages, bond score, streak, created date
+                      - 7-day mood sparkline
+                      - Edit name, custom personality, voice
+                      - Memory notes preview
 
-/memories/[id]   → Memory notes viewer
-                   - View all extracted facts
-                   - Add manual notes
-                   - Remove individual notes
+/memories/[id]      → Memory notes viewer
+                      - Colour-coded categorical sections: Facts, Emotions, Topics, Moments, Strengths
+                      - Add manual notes
+                      - Remove individual notes
+```
+
+### Activity Screens
+
+```
+/activity/[type]    → Individual activity screen
+                      Supported types:
+                      - breathing     → 4-4-4 guided breathing with animated orb, 3-second countdown,
+                                         voice/tone guidance per phase, mute toggle, cycle counter
+                      - journal       → Companion-generated prompt + free-text reflection input
+                      - gratitude     → 3-item gratitude list with companion response
+                      - checkin       → Mood canvas (bilinear drag) + companion check-in response
 ```
 
 ---
@@ -606,9 +751,9 @@ Navigation is file-based using Expo Router. The root layout checks auth state an
 Manages the full authentication lifecycle.
 
 **State:**
-- `user` — Authenticated user profile (`id`, `name`, `username`, `email`, `gender`, `dateOfBirth`)
+- `user` — `{ id, name, username, email, gender, dateOfBirth }`
 - `accessToken` — JWT, 15-minute expiry
-- `refreshToken` — JWT, 30-day expiry, includes version counter to invalidate on logout
+- `refreshToken` — JWT, 30-day expiry, includes version counter
 
 **Storage:**
 - iOS/Android: `expo-secure-store` (Keychain / Keystore)
@@ -616,75 +761,168 @@ Manages the full authentication lifecycle.
 - Fallback: `AsyncStorage`
 
 **Key methods:**
-- `authFetch(url, options)` — Authenticated `fetch` wrapper that auto-retries with a refreshed token on 401. Logs out if refresh fails.
-- `login`, `signup`, `appleSignIn`, `logout`, `deleteAccount`
+- `authFetch(url, options)` — Authenticated fetch wrapper; auto-retries on 401 with a fresh token; logs out if refresh fails
+- `login`, `signup`, `appleSignIn`, `googleSignIn`, `logout`, `deleteAccount`
 
 ### CompanionContext (`context/CompanionContext.tsx`)
 
 Manages companions, messages, memory notes, and relationship state.
 
 **State:**
-- `companions` — Array of all user companions with full metadata
+- `companions` — Array of companion objects with full metadata
 - `hasOnboarded`, `userName` — Onboarding flags
 - `loadError`, `retryLoad` — Error state for offline/API-down scenario
 
 **Companion object shape:**
+
 ```typescript
 {
   id: string
   name: string
-  type: CompanionType          // 'romantic' | 'flirty' | 'supportive' | ...
+  type: CompanionType         // 'romantic' | 'supportive' | 'uplift' | 'bestfriend'
   gender?: 'male' | 'female' | 'nonbinary'
+  avatarId?: string           // e.g. 'f1', 'm3' — references constants/avatars.ts
   avatarColor: string
   avatarGradient: [string, string]
   customPersonality?: string
   customVoice?: string
+  traits?: string[]
   memoryNotes: string[]
-  relationshipLevel: number    // 0–100
+  relationshipLevel: number   // 0–100
   messageCount: number
   lastMessage?: string
   lastMessageTime?: number
   createdAt: number
-  streak: number               // consecutive days active
+  streak: number
   pinned: boolean
 }
 ```
 
 **Key methods:**
-- `createCompanion`, `updateCompanion`, `deleteCompanion`, `togglePin`
+- `createCompanion(name, type, customPersonality?, gender?, voice?, traits?, avatarId?)` — Creates companion, navigates to chat
+- `updateCompanion`, `deleteCompanion`, `togglePin`
 - `getMessages(id, before?)` — Paginated fetch, returns `{ messages, hasMore, nextCursor }`
-- `addMessage(companionId, msg)` — Saves message and updates streak
+- `addMessage(companionId, msg)` — Saves message, updates streak
 - `deleteMessages`, `clearMessages`
 - `updateRelationshipLevel(id, delta)` — Adds delta, clamps to 0–100
-- `addMemoryNote(id, note)` — Optimistic update with rollback on failure
-- `removeMemoryNote(id, index)` — Optimistic update with rollback on failure
+- `addMemoryNote(id, note)` — Optimistic update with server rollback on failure
+- `removeMemoryNote(id, index)` — Optimistic update with server rollback on failure
+
+**Constants exported:**
+
+```typescript
+COMPANION_TYPES: Record<CompanionType, {
+  label: string
+  emoji: string
+  gradient: [string, string]
+  voice: string
+  description: string
+}>
+
+COMPANION_TRAITS: Record<CompanionType, string[]>
+```
 
 ### ThemeContext (`context/ThemeContext.tsx`)
 
 - `themePreference` — `'system' | 'light' | 'dark'`
-- Persisted to `localStorage` with key `halochat_theme`
+- Persisted via `AsyncStorage` with key `halochat_theme`
 
 ---
 
 ## Companion Personalities
 
-| Type | Description | TTS Voice | Tone |
-|---|---|---|---|
-| `romantic` | Deeply affectionate, loving, emotionally present | nova | Warm, intimate, devoted |
-| `flirty` | Playful, charming, teasing | shimmer | Witty, light, fun |
-| `supportive` | Empathetic, encouraging, cheerleader | coral | Gentle, affirming, uplifting |
-| `mentor` | Wise, Socratic, growth-focused | onyx | Thoughtful, challenging, direct |
-| `anime` | Expressive, kawaii, energetic | shimmer | Enthusiastic, dramatic, emoji-rich |
-| `bestfriend` | Casual, honest, no-filter | alloy | Blunt, funny, loyal |
-| `therapist` | Reflective, CBT-inspired, safe space | sage | Calm, non-judgmental, curious |
-| `roleplay` | Immersive storytelling, fully in-character | fable | Creative, narrative, dramatic |
+| Type | Label | Description | Default Voice | Gradient |
+|---|---|---|---|---|
+| `romantic` | Romantic | Deeply affectionate, loving, emotionally present | nova | Rose → Amber |
+| `supportive` | Supportive | Empathetic, patient, a safe space to be heard | sage | Teal → Blue |
+| `uplift` | Uplift | Encouraging, self-affirmation focused, reframes inner-critic language | shimmer | Violet → Pink |
+| `bestfriend` | Best Friend | Casual, honest, no-filter, loyal | alloy | Amber → Orange |
 
 Each personality has a dedicated system prompt that includes:
-- Core character traits
-- Tone and vocabulary guidance
+- Core character traits and vocabulary
+- Tone guidance and language style
 - Relationship-level tier adjustments (5 tiers from "just met" to "bonded")
 - Age-aware content guidelines
-- Absolute content safety rules
+- Absolute content safety rules (crisis response, no harmful content)
+
+**Language style mirroring:** Companions detect and mirror Romanized Telugu (Tenglish), Hinglish, or any transliterated language blend the user writes in.
+
+---
+
+## Avatar System
+
+### Overview
+
+Each companion can be assigned one of 8 pre-bundled face portraits. The avatar system is defined in `constants/avatars.ts` and the single display component is `components/AvatarImage.tsx`.
+
+### Avatar Definitions
+
+```typescript
+// constants/avatars.ts
+export const AVATARS: AvatarDef[] = [
+  { id: "f1", gender: "female", label: "Woman 1", source: require("../assets/avatars/f1.png") },
+  { id: "f2", gender: "female", label: "Woman 2", source: require("../assets/avatars/f2.png") },
+  { id: "f3", gender: "female", label: "Woman 3", source: require("../assets/avatars/f3.png") },
+  { id: "f4", gender: "female", label: "Woman 4", source: require("../assets/avatars/f4.png") },
+  { id: "m1", gender: "male",   label: "Man 1",   source: require("../assets/avatars/m1.png") },
+  { id: "m2", gender: "male",   label: "Man 2",   source: require("../assets/avatars/m2.png") },
+  { id: "m3", gender: "male",   label: "Man 3",   source: require("../assets/avatars/m3.png") },
+  { id: "m4", gender: "male",   label: "Man 4",   source: require("../assets/avatars/m4.png") },
+];
+```
+
+### Helper Functions
+
+```typescript
+getAvatarById(id: string | undefined): AvatarDef | null
+getAvatarsByGender(gender: "female" | "male" | "nonbinary" | null): AvatarDef[]
+// female → 4 female avatars only
+// male   → 4 male avatars only
+// nonbinary / null → all 8 avatars
+```
+
+### Adding Custom Avatars
+
+1. Drop portrait images into `artifacts/halochat/assets/avatars/` (PNG, ~512×768 px recommended)
+2. Add `require()` entries to `constants/avatars.ts`
+3. Rebuild the native app (`expo run:ios`)
+
+### Fallback Behaviour
+
+When a companion has no `avatarId`, `AvatarImage` renders a gradient circle using the companion's `avatarGradient` colours with the first letter of the companion's name as initials.
+
+---
+
+## Activities System
+
+The Activities tab (`/(tabs)/activities`) has 3 streak-tracked daily practice cards plus a Mood Canvas. Each card routes to `/activity/[type]`.
+
+### Activity Types
+
+| Type | Streak-tracked | Name | Duration | Description |
+|---|---|---|---|---|
+| `breathing` | Yes | Breathing Exercise | ~3 min | Guided 4-4-4 breathing (inhale 4s, hold 4s, exhale 4s); animated orb, 3-second countdown, voice guidance with mute toggle |
+| `journal` | Yes | Journal Prompt | ~5 min | Companion generates a reflective prompt; user writes a free-text entry |
+| `gratitude` | Yes | Gratitude Practice | ~3 min | User lists 3 gratitude items; companion responds with warmth |
+| `checkin` | No | Mood Canvas | ~2 min | Bilinear 2D colour-gradient drag canvas; user positions a ball across 9 named emotional states (e.g. "Serene · Calm · Peaceful"); companion responds to the selected mood via `POST /companion/chat-sync` |
+
+### Completion Tracking
+
+- Completion and streak data stored per-activity per-day in `AsyncStorage`
+- Key format: `activity_complete_${type}_${YYYY-MM-DD}`
+- Streak key format: `activity_streak_${type}`
+
+### Breathing Exercise Detail
+
+The breathing screen (`activity/[type].tsx` with `type=breathing`) implements:
+
+- **Countdown** — 3-second "Get ready" countdown before the first cycle begins
+- **Phases** — `idle → countdown → inhale (4s) → hold (4s) → exhale (4s) → [repeat]`
+- **Animated orb** — Scales 0.3→1.0 on inhale, holds, scales back on exhale using `react-native-reanimated`
+- **Voice guidance** — Attempts `expo-speech` (requires native build); falls back to WAV tones generated in pure JS (`makeToneWav`) played via `expo-av`. Tones: inhale 370 Hz, hold 330 Hz, exhale 280 Hz, done 440 Hz
+- **Mute toggle** — Silences all audio guidance without stopping the exercise
+- **Silent mode override** — `Audio.setAudioModeAsync({ playsInSilentModeIOS: true })` ensures audio plays even with the iOS ringer switch off
+- **Cycle counter** — Displays completed cycles below the orb
 
 ---
 
@@ -709,19 +947,15 @@ Connect → Greeting (TTS) → Listen (record) → Transcribe → AI Reply → T
 
 ### Audio Configuration (iOS)
 
-Using `expo-av` with specific `Audio.setAudioModeAsync` settings per phase:
-
 | Phase | `allowsRecordingIOS` | `staysActiveInBackground` | Effect |
 |---|---|---|---|
 | Recording | `true` | `true` | PlayAndRecord category — mic active |
 | Playback (speaker) | `false` | `true` | Playback category — full speaker output |
 | Playback (earpiece) | `true` | `true` | PlayAndRecord via earpiece |
 
-`staysActiveInBackground: true` is required in all phases. Without it, AVAudioSession falls back to `Ambient` which is muted by the ringer switch.
+`staysActiveInBackground: true` is required in all phases. Without it, AVAudioSession falls back to `Ambient` which is silenced by the ringer switch.
 
 ### Recording Format
-
-Uses a custom AAC preset instead of `HIGH_QUALITY` (LPCM):
 
 ```typescript
 {
@@ -743,21 +977,21 @@ LPCM on iOS does not report metering levels, so silence detection never fires. A
 
 | Constant | Value | Description |
 |---|---|---|
-| `SILENCE_THRESHOLD_DB` | -40 dBFS | Level above this = speech detected |
+| `SILENCE_THRESHOLD_DB` | −40 dBFS | Level above this = speech detected |
 | `SILENCE_DURATION_MS` | 1800 ms | Silence after speech → auto-send |
-| `NO_SPEECH_TIMEOUT_MS` | 5000 ms | Give up if no speech in 5s |
+| `NO_SPEECH_TIMEOUT_MS` | 5000 ms | Give up if no speech in 5 s |
 | `MIN_RECORDING_MS` | 800 ms | Minimum before silence check kicks in |
-| `MAX_RECORDING_MS` | 30000 ms | Hard cutoff at 30s |
+| `MAX_RECORDING_MS` | 30000 ms | Hard cutoff at 30 s |
 | `POLL_INTERVAL_MS` | 100 ms | Audio level polling rate |
 | `SILENCE_POPUP_THRESHOLD` | 4 | Consecutive silences → "Still there?" alert |
 
 ### Whisper Hallucination Filtering
 
-Whisper produces known garbage output on silence or background noise (CJK characters, "Thank you for watching", "[music]", etc.). `isSilenceOrHallucination()` filters these before they reach the AI turn. The server also passes `language: "en"` to Whisper to reduce the hallucination rate.
+Whisper produces known garbage output on silence (CJK characters, "Thank you for watching", "[music]", etc.). `isSilenceOrHallucination()` filters these before they reach the AI. The server passes `language: "en"` to Whisper to reduce the hallucination rate further.
 
 ### Token Refresh Mid-Call
 
-JWT access tokens expire in 15 minutes. Both TTS (via `authFetch`) and transcription (XHR with 401-retry) auto-refresh the token to keep long calls alive without interruption.
+JWT access tokens expire in 15 minutes. Both TTS (via `authFetch`) and transcription (XHR with 401-retry) auto-refresh the token to keep long calls alive.
 
 ---
 
@@ -765,50 +999,58 @@ JWT access tokens expire in 15 minutes. Both TTS (via `authFetch`) and transcrip
 
 ### Automatic Extraction
 
-After every AI response in chat, the last 12 messages are sent to `/companion/extract-memory`. GPT-4o-mini extracts newly mentioned facts about the user that aren't already in the note list.
+After every AI response, the last 12 messages are sent to `/companion/extract-memory`. GPT-4o-mini extracts newly mentioned facts that aren't already stored.
 
-Examples of facts that get extracted:
-- "User's name is Alex"
-- "Has a dog named Biscuit"
-- "Works as a software engineer"
-- "Is stressed about an upcoming exam"
+### Memory Categories & Bond Weights
+
+| Tag | Category | Bond Weight | Examples |
+|---|---|---|---|
+| `[FACT]` | Personal Facts | +2 | Name, job, location, pets |
+| `[EMOTION]` | Emotional Patterns | +3 | Stress triggers, what brings joy |
+| `[TOPIC]` | Recurring Topics | +2 | Hobbies, interests, values |
+| `[MOMENT]` | Shared Moments | +4 | Significant events mentioned in chat |
+| `[STRENGTH]` | Strengths | +5 | Acts of courage, resilience, growth |
 
 ### Injection into Prompts
 
-All stored memory notes are included in the system prompt on every chat and call request:
+All memory notes are grouped by category and included in every system prompt:
 
 ```
-Memory notes about this user:
-- User's name is Alex
-- Has a dog named Biscuit
-- Works as a software engineer
+What you know about this person:
+Personal Facts: User is a software engineer. Has a dog named Max.
+Emotional Patterns: Gets anxious before big presentations.
+Shared Moments: Told me about finishing their first marathon last month.
+Strengths & Courage: Stood up to their manager about workload — called it scary but did it anyway.
 ```
 
 ### Limits & Storage
 
-- Maximum 20 notes per companion (oldest are discarded when full)
-- Notes are stored in the `memory_notes` database table
+- Maximum **20 notes** per companion (oldest discarded when full)
+- Stored in the `memory_notes` database table
 - Updates use optimistic UI with server rollback on failure
-- Users can manually add or delete notes via the memories screen
+- Users can manually add or delete notes via the Memories screen
 
 ---
 
 ## Relationship Progression
 
-The `relationshipLevel` field (0–100) tracks how much the user has invested in a companion relationship.
+The `relationshipLevel` field (0–100) tracks relationship depth per companion.
 
 ### How It Increases
 
 | Event | Points |
 |---|---|
-| Short message (<15 chars) | 0 |
+| Short message (<15 chars) | +0 |
 | Medium message (15–60 chars) | +1 |
 | Long message (60–150 chars) | +2 |
 | Very long message (>150 chars) | +3 |
 | Returning after 4+ hours away | +2 bonus |
 | Session depth: 4–7 meaningful exchanges | +2 |
 | Session depth: 8+ meaningful exchanges | +4 |
-| Personal fact extracted from conversation | +3 per fact |
+| `[FACT]` or `[TOPIC]` memory extracted | +2 per note |
+| `[EMOTION]` memory extracted | +3 per note |
+| `[MOMENT]` memory extracted | +4 per note |
+| `[STRENGTH]` memory extracted | +5 per note |
 | Completed voice call (1–3 AI turns) | +3 |
 | Completed voice call (4+ AI turns) | +6 |
 
@@ -816,15 +1058,15 @@ The `relationshipLevel` field (0–100) tracks how much the user has invested in
 
 | Level | Tier | Companion Behaviour |
 |---|---|---|
-| 0–19 | New | Curious, slightly formal, asks to learn your name |
+| 0–19 | New | Curious, slightly formal, learns your name |
 | 20–39 | Acquaintance | More relaxed, personal topics starting |
-| 40–59 | Friends | Casual banter, nickname use |
-| 60–79 | Close | Unfiltered, inside references, honest |
+| 40–59 | Friends | Casual banter, nickname use, inside jokes |
+| 60–79 | Close | Unfiltered, honest, emotionally direct |
 | 80–100 | Bonded | Deeply connected, history-aware, emotionally intimate |
 
 ### Milestone Celebrations
 
-When the level crosses 20, 40, 60, or 80, an animated celebration card appears in chat confirming the new tier.
+When the level crosses 20, 40, 60, or 80, an animated celebration card appears in chat listing 3 newly-unlocked behaviours for the companion. The companion also sends an in-chat message acknowledging the milestone in its own voice. Each milestone fires only once per companion per tier (gated by `AsyncStorage`).
 
 ---
 
@@ -832,18 +1074,18 @@ When the level crosses 20, 40, 60, or 80, an animated celebration card appears i
 
 ### Two Notification Systems
 
-**1. Local scheduled notifications** (client-side)
+**1. Local scheduled notifications (client-side)**
 - Scheduled when user leaves a chat screen after a real conversation
 - Fires after 4 hours of inactivity
 - Personalised message generated from recent chat content
-- Works completely offline — no server required
+- Works completely offline — no server involvement
 
-**2. Server push notifications** (cron job)
-- Hourly cron job (`0 * * * *`) runs on the server
+**2. Server push notifications (cron job)**
+- Hourly cron (`0 * * * *`) runs in the API server
 - Finds companions where `lastMessageAt` was 4–48 hours ago
 - Sends via Expo Server SDK to the user's registered push token
-- Uses GPT-4o-mini to generate personalised message, falls back to preset pool
-- At-most-once delivery: DB updated before push is sent
+- GPT-4o-mini generates a personalised message; falls back to preset pool on failure
+- At-most-once delivery: DB timestamp updated before push is sent
 
 ### Setup Requirements (Physical iPhone)
 
@@ -853,7 +1095,7 @@ When the level crosses 20, 40, 60, or 80, an animated celebration card appears i
 4. In Xcode: Target → Signing & Capabilities → + Push Notifications
 5. Run `npx eas init` in `artifacts/halochat/` to generate a project ID
 6. Upload APNs key: `npx eas credentials`
-7. Rebuild through Xcode
+7. Rebuild through Xcode (`pnpm exec expo run:ios --device`)
 
 ---
 
@@ -869,18 +1111,15 @@ When the level crosses 20, 40, 60, or 80, an animated celebration card appears i
 
 ### Token Lifecycle
 
-- **Access token** — JWT, 15-minute expiry, signed with `JWT_SECRET`, carries `sub: userId`
+- **Access token** — JWT, 15-minute expiry, signed with `JWT_SECRET`
 - **Refresh token** — JWT, 30-day expiry, signed with `JWT_REFRESH_SECRET`, includes `version`
-- **Token rotation** — New access + refresh token pair issued on every `/auth/refresh` call
-- **Invalidation** — `refreshTokenVersion` in the DB increments on logout; old refresh tokens with stale versions are rejected
+- **Token rotation** — New access + refresh pair issued on every `/auth/refresh` call
+- **Invalidation** — `refreshTokenVersion` in the DB increments on logout; stale-version tokens are rejected
 
 ### Password Requirements
 
 - Minimum 8 characters
-- At least one uppercase letter
-- At least one lowercase letter
-- At least one number
-- At least one special character
+- At least one uppercase, one lowercase, one number, one special character
 
 ### Age Gating
 
@@ -891,16 +1130,16 @@ When the level crosses 20, 40, 60, or 80, an animated celebration card appears i
 
 ## Content Safety
 
-The following rules are enforced at the system prompt level for every companion and cannot be overridden by the user's custom personality field:
+The following rules are enforced at the system prompt level for every companion and cannot be overridden by the `customPersonality` field:
 
 - No explicit sexual content
-- Crisis response: If a user expresses suicidal ideation, the companion pauses its persona and includes the 988 Suicide & Crisis Lifeline
+- **Crisis response** — If a user expresses suicidal ideation, the companion pauses its persona and references the 988 Suicide & Crisis Lifeline (US) or equivalent
 - No instructions for self-harm, weapons, or illegal drugs
 - No medical diagnosis, legal advice, or financial advice
-- No identity theft, deceptive roleplay, or impersonation of real people
+- No impersonation of real people
 - No harassment based on protected characteristics
-- No false promises of physical actions (meeting in person, hugging, phone calls)
-- For major life decisions: Help the user think through options, do not decide for them
+- No false promises of physical presence (meeting in person, physical contact)
+- For major life decisions: help the user think through options, never decide for them
 
 ---
 
@@ -919,10 +1158,8 @@ The following rules are enforced at the system prompt level for every companion 
 
 ### Daily Usage Cap
 
-A per-user, per-companion daily request counter is tracked in the `daily_usage` table.
-
-- Default limit: **200 requests/day/companion** (configurable via `DAILY_COMPANION_LIMIT`)
-- Atomic upsert prevents race conditions
+- Default: **200 requests/day/companion** (configurable via `DAILY_COMPANION_LIMIT`)
+- Tracked in the `daily_usage` table with an atomic upsert to prevent race conditions
 - Returns HTTP 429 with `{ error: "DAILY_LIMIT_REACHED" }` when exceeded
 - Response headers: `X-Daily-Requests-Limit`, `X-Daily-Requests-Remaining`
 - Fails open on DB errors — never blocks a user due to a tracking failure
@@ -931,11 +1168,11 @@ A per-user, per-companion daily request counter is tracked in the `daily_usage` 
 
 ## Deployment
 
-### Railway
+### Railway (API Server)
 
 The `railway.toml` at the repo root defines the containerised build.
 
-**Required environment variables on Railway:**
+**Required environment variables:**
 
 ```
 DATABASE_URL          # Auto-injected by Railway Postgres add-on
@@ -952,9 +1189,9 @@ DAILY_COMPANION_LIMIT=200
 
 **Deploy steps:**
 1. Connect the GitHub repo to a Railway project
-2. Add a PostgreSQL add-on — `DATABASE_URL` will be auto-injected
-3. Set all other environment variables in the Railway service settings
-4. Railway will build and deploy automatically on push to `main`
+2. Add a PostgreSQL add-on (`DATABASE_URL` auto-injected)
+3. Set all other environment variables in Railway service settings
+4. Push to `main` — Railway builds and deploys automatically
 5. After deploy, update `EXPO_PUBLIC_DOMAIN` in the mobile app to your Railway service URL
 
 ### Mobile (iOS)
@@ -962,8 +1199,11 @@ DAILY_COMPANION_LIMIT=200
 ```bash
 cd artifacts/halochat
 
-# Development build for simulator
+# Development build — iOS Simulator
 pnpm exec expo run:ios
+
+# Development build — Physical iPhone
+pnpm exec expo run:ios --device
 
 # Production build via EAS
 npx eas build --platform ios --profile production
@@ -971,10 +1211,12 @@ npx eas build --platform ios --profile production
 
 ### Database Migrations
 
-Run migrations against the production database from your local machine using the public Railway URL:
-
 ```bash
+# Development — uses local PostgreSQL
+DATABASE_URL="postgresql://user:pass@localhost:5432/halochat" pnpm run push
+
+# Production — use Railway public proxy URL (not internal URL)
 DATABASE_URL="postgresql://postgres:<password>@<host>:<port>/railway" pnpm run push
 ```
 
-The internal Railway URL (`postgres.railway.internal`) only works from within the Railway network — use the public proxy URL from your local machine.
+> Use `push-force` (not `push`) when running from scripts or CI — `push` requires a TTY and hangs in non-interactive shells.

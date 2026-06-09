@@ -8,9 +8,9 @@
 |---|---|
 | **Project Name** | HaloChat — AI Companion App |
 | **Author / Owner** | Chandhana Chinthakindi / Developer & Owner |
-| **Version** | 1.1 |
+| **Version** | 2.0 |
 | **Date Created** | May 2026 |
-| **Last Updated** | May 2026 |
+| **Last Updated** | June 2026 |
 | **Document Type** | Project Documentation |
 | **Confidentiality** | Internal / Owner Use |
 
@@ -49,38 +49,37 @@ HaloChat is not a general-purpose chatbot. It is a relationship-first mobile app
 
 #### What Users Can Do
 
-Users create a companion by choosing from 8 distinct personality archetypes, picking a name, selecting a voice, and optionally writing a custom personality note. From that point:
+Users create a companion by choosing from 4 distinct personality archetypes, picking a name, selecting a voice and face avatar, and optionally adding personality traits. From that point:
 
 - **Chat in real time** — Text messages stream token-by-token so responses appear as the AI "types." Reply length adapts to the user's message: short inputs get concise replies; long, detailed messages get fuller responses.
 - **Make a voice call** — Tapping the call button opens a full-screen voice call experience. The app records the user's speech, transcribes it via OpenAI Whisper, generates a reply with GPT-4o-mini, and plays it back through a natural-sounding TTS voice — all in a seamless turn-based loop with automatic silence detection.
 - **Send voice messages** — In chat, users can record and send voice notes; the app transcribes them before sending to the AI.
 - **Build a bond** — Every interaction adds to the companion's bond score (0–100 across 5 named tiers: New → Acquaintance → Friend → Close → Bonded). As the tier increases, the companion's tone shifts from curious and slightly formal to warm, familiar, and emotionally open.
-- **Be remembered** — After conversations, GPT-4o-mini extracts meaningful personal facts (goals, life events, preferences, relationships) and stores them as memory notes. These notes are injected into every future prompt so the companion actually *knows* the user.
+- **Be remembered** — After conversations, GPT-4o-mini extracts meaningful personal facts into 5 categories (Facts, Emotions, Topics, Moments, Strengths) and stores them as memory notes. These are injected into every future prompt so the companion actually *knows* the user.
+- **Do daily activities** — The Activities tab offers 3 streak-tracked daily practices: Breathing Exercise (guided 4-4-4 cycles with voice cues), Journal Prompt, and Gratitude Practice. Each tracks daily completion and consecutive-day streaks. The tab also features a **Mood Canvas** — an interactive 2D colour gradient where users drag a ball to express their current emotional state (one of 9 named moods), then optionally share it with a companion who responds in chat.
+- **Choose a face** — Companions can be assigned one of 8 bundled avatar portraits (4F, 4M) selected during creation. The avatar appears across chat, profile, and call screens.
 - **Track their mood** — When leaving a chat after a real exchange, a mood check-in sheet appears (5-emoji scale). A 7-day mood sparkline is visible on the companion's profile page.
 - **Receive check-ins** — After 4+ hours of inactivity, the companion card shows a pulsing "thinking of you" indicator and the app sends a personalised push notification.
 
-#### The 8 Companion Personality Types
+#### The 4 Companion Personality Types
 
-| Type | Character |
-|---|---|
-| **Romantic** | Devoted, affectionate, emotionally intimate; speaks with warmth and genuine care |
-| **Flirty** | Playful, witty, charming; light-hearted banter with an undercurrent of attraction |
-| **Supportive** | Empathetic, encouraging, steady; listens without judgment and validates feelings |
-| **Best Friend** | Casual, fun, loyal; jokes around, gives honest opinions, feels like a real mate |
-| **Mentor** | Thoughtful, challenging, growth-oriented; pushes the user to think and improve |
-| **Anime** | Expressive, dramatic, pop-culture-aware; leans into anime tropes and enthusiastic energy |
-| **Therapist** | Calm, reflective, technique-informed; uses active listening and reframes negative thoughts |
-| **Roleplay** | Creative, adaptive, story-driven; collaborative fiction and character-driven scenarios |
+| Type | Gradient | Default Voice | Character |
+|---|---|---|---|
+| **Romantic** | Rose → Amber | Nova (Warm) | Devoted, affectionate, emotionally intimate; speaks with warmth and genuine care |
+| **Supportive** | Teal → Blue | Sage (Mellow) | Empathetic, patient, steady; listens without judgment and validates feelings; never rushes |
+| **Uplift** | Violet → Pink | Shimmer (Bright) | Encouraging, self-affirmation focused; detects and reframes inner-critic language; celebrates real moments |
+| **Best Friend** | Amber → Orange | Alloy (Rich) | Casual, fun, loyal; jokes around, gives honest opinions, feels like a real mate; no filter |
 
-Each type is powered by a distinct system prompt that defines tone, vocabulary, behavioural rules, and content approach — not just a different name over the same model call.
+Each type is powered by a distinct system prompt that defines tone, vocabulary, behavioural rules, relationship-tier adjustments, and content approach — not just a different name over the same model call. The companion's voice, gradient, and emoji are all unique per type.
 
 #### How It Works Under the Hood
 
-1. **User opens the app** → Auth check → Companion list loaded from the backend.
-2. **Chat screen** → User message POSTed to `POST /companion/:id/chat/stream` → Express route builds a full system prompt (personality + memory notes + relationship tier + age-aware rules) → OpenAI `stream: true` response forwarded as SSE to the mobile client.
-3. **Voice call** → Client records audio → POSTed to `POST /companion/:id/voice-call` → Whisper transcription → same prompt pipeline as text → TTS-1 audio returned as `audio/mpeg` → client plays via `expo-av`.
-4. **Memory extraction** → After every 4+ message exchange, `POST /companion/:id/memory/extract` sends the recent conversation to GPT-4o-mini asking it to identify new personal facts → merged and stored in `memory_notes` table.
-5. **Mood & profile** → Mood score written to `mood_logs` table; companion profile page reads 7-day history and renders a sparkline.
+1. **User opens the app** → Auth check → Companion list loaded from the backend → `HaloBackground` ambient gradient renders at z-index −1 behind every screen.
+2. **Chat screen** → User message `POST /companion/chat` (SSE) → Express builds a full system prompt (personality + memory notes grouped by category + relationship tier + age rules) → OpenAI `stream: true` tokens forwarded as Server-Sent Events to the client → after response, `POST /companion/extract-memory` extracts new facts in the background.
+3. **Voice call** → Client records via `expo-av` (AAC/m4a) → `POST /companion/transcribe` sends audio to OpenAI Whisper → transcript fed to `POST /companion/chat-sync` (blocking) → reply text streamed to `GET /companion/tts` → audio played back via `expo-av` → loop repeats.
+4. **Memory extraction** → After every AI response, last 12 messages sent to `POST /companion/extract-memory` → GPT-4o-mini returns structured facts tagged by category (`[FACT]`, `[EMOTION]`, `[TOPIC]`, `[MOMENT]`, `[STRENGTH]`) → merged into `memory_notes` table (max 20, oldest discarded).
+5. **Activities** → Each activity screen (`/activity/[type]`) runs locally with per-day completion and streak data in AsyncStorage; companion-response activities call `POST /companion/chat-sync` with a specialised activity prompt.
+6. **Mood & profile** → Mood score written to `mood_logs` table via `POST /companions/:id/mood` (upserts on same day); companion profile reads 7-day history and renders a sparkline.
 
 ---
 
@@ -91,7 +90,7 @@ Each type is powered by a distinct system prompt that defines tone, vocabulary, 
 | Loneliness and lack of connection | Always-available companions designed for genuine emotional engagement |
 | Emotional support is hard to access | Supportive and therapist-style companions available 24/7 with no waitlist |
 | Fear of judgment in real relationships | AI companions are completely non-judgmental and never share what you say |
-| Boredom and lack of creative stimulation | Roleplay, mentor, and anime companion types for entertainment and growth |
+| Boredom and lack of creative stimulation | Best Friend companion for creative, honest banter; customisable traits and personality override |
 | Difficulty practising communication skills | Low-stakes conversations that build confidence for real-world interactions |
 
 ### Business Case
@@ -110,23 +109,27 @@ HaloChat's long-term vision is to be the most trusted and personal AI relationsh
 
 ## 2. Project Scope & Objectives
 
-### In Scope (v1.1 — current)
+### In Scope (v2.0 — current)
 
-- iOS mobile application (React Native + Expo)
-- 8 distinct AI companion personality types
-- Real-time text chat with streaming responses and dynamic reply length
-- Full voice call capability (speech-to-text + TTS) with per-companion voice selection
+- iOS mobile application (React Native + Expo SDK 54, new architecture enabled)
+- 4 distinct AI companion personality types (Romantic, Supportive, Uplift, Best Friend)
+- Real-time text chat with streaming responses (SSE) and dynamic reply length
+- Full voice call capability (speech-to-text + TTS) with per-companion voice selection and live preview
 - Voice message recording in chat
-- Companion memory system (automatic fact extraction)
-- Relationship progression and milestone system
-- Mood check-in system with 7-day history
+- Deep memory system — 5 categories with weighted bond increments; grouped injection into prompts
+- Relationship progression (bond score 0–100, 5 tiers) with milestone celebrations
+- Mood check-in system with 7-day sparkline history
+- Activities tab — 3 streak-tracked daily cards (Breathing Exercise 4-4-4, Journal Prompt, Gratitude) + Mood Canvas (2D colour-based mood expression, shareable with companions)
+- Avatar system — 8 bundled portrait images (4F, 4M), gender-filtered picker, gradient fallback
+- HaloBackground ambient animation — atmospheric gradient orbs behind every screen
+- Create wizard — 7-step flow with slide transitions, voice waveform preview, trait randomiser
 - Companion waiting indicator (pulsing dot after 4h inactivity)
-- Push notification check-ins
+- Push notification check-ins (local scheduled + server-side cron)
 - Email/password, Apple Sign-In, Google OAuth
 - User profile and companion profile management
+- Language style mirroring (Tenglish, Hinglish, other transliterated blends)
 - Daily usage limits and rate limiting for cost control
 - Backend API deployed on Railway with PostgreSQL
-- Animated loading/splash screen with branded first-launch experience
 
 ### Out of Scope (v1.0)
 
@@ -187,10 +190,10 @@ Alex moved cities for work and hasn't built a strong social circle yet. Long wor
 
 > **Mia, 22, Art Student, London**
 
-Mia is fascinated by AI and storytelling. She uses HaloChat's **Roleplay** and **Anime** companions to explore creative scenarios and collaborative world-building. She shares her app on TikTok and introduces friends to it.
+Mia is fascinated by AI and storytelling. She uses HaloChat's **Best Friend** companion for casual, honest conversations and creative banter. She pushes boundaries with the custom personality field to shape a unique character and shares her conversations on TikTok.
 
 **Motivations:** Entertainment, creative expression, novelty, social content creation
-**Primary features used:** Roleplay mode, voice calls, custom personality field
+**Primary features used:** Best Friend companion, voice calls, custom personality field, trait customisation
 **Upgrade driver:** Wants unlimited messages and exclusive personality customisation
 
 ---
@@ -199,10 +202,10 @@ Mia is fascinated by AI and storytelling. She uses HaloChat's **Roleplay** and *
 
 > **Jordan, 31, Marketing Manager, Toronto**
 
-Jordan is ambitious and uses HaloChat's **Mentor** companion to think through career decisions, prepare for presentations, and get challenged on ideas. They treat it like a personal coach on demand.
+Jordan is ambitious and uses HaloChat's **Uplift** companion to reframe negative self-talk, push through creative blocks, and celebrate real progress. They also use the daily Breathing and Journal activities to build a consistent reflection habit.
 
-**Motivations:** Self-improvement, productivity, accountability
-**Primary features used:** Mentor companion, voice calls, memory notes (storing goals and progress)
+**Motivations:** Self-improvement, productivity, accountability, mental clarity
+**Primary features used:** Uplift companion, Activities tab (breathing, journal), voice calls, memory notes (strengths category)
 **Upgrade driver:** Wants more AI turns per day and conversation exports
 
 ---
@@ -211,11 +214,11 @@ Jordan is ambitious and uses HaloChat's **Mentor** companion to think through ca
 
 > **Sam, 25, Teacher, Melbourne**
 
-Sam went through a breakup and uses HaloChat's **Therapist** companion to process emotions. They are not in formal therapy but want a safe, consistent outlet. They appreciate that the companion never forgets what they've shared.
+Sam went through a breakup and uses HaloChat's **Supportive** companion to process emotions. They are not in formal therapy but want a safe, consistent outlet. They use the daily Mood Check-in and Gratitude activities alongside long conversations. They appreciate that the companion never forgets what they've shared.
 
 **Motivations:** Emotional processing, mental wellness support, non-judgmental listening
-**Primary features used:** Therapist companion, memory system, long conversations
-**Upgrade driver:** Crisis that builds trust in the product
+**Primary features used:** Supportive companion, memory system, Activities tab (mood canvas, gratitude), long conversations
+**Upgrade driver:** Trust built through consistent emotional support over time
 
 ---
 
@@ -265,12 +268,16 @@ Sam went through a breakup and uses HaloChat's **Therapist** companion to proces
 
 | Component | Technology | Reason for Choice |
 |---|---|---|
-| Framework | React Native 0.81 + Expo SDK 54 | Cross-platform foundation; Expo simplifies native module management and distribution |
+| Framework | React Native 0.81 + Expo SDK 54 (new arch) | Cross-platform foundation; Expo simplifies native module management and distribution |
 | Navigation | Expo Router v6 (file-based) | Zero-config routing analogous to Next.js; typed routes |
-| Animations | React Native Reanimated 4 | 60fps animations on the UI thread; necessary for call screen and typing bubbles |
-| Audio | expo-av | Native recording and playback on both iOS and Android with AVAudioSession control |
+| Animations | React Native Reanimated 4 (JSI) | 60 fps animations on the UI thread; used for entrance animations, slide transitions, waveform, breathing orb |
+| Audio | expo-av | Native recording and playback on iOS with full AVAudioSession control (AAC recording, metering, silent mode override) |
+| Images | expo-image | Fast cached image component for avatar portraits |
+| Gradients | expo-linear-gradient | Used for type cards, buttons, headers, and backgrounds throughout |
+| Haptics | expo-haptics | Impact and selection feedback on interactive elements |
 | Notifications | expo-notifications | Cross-platform push token management + local scheduling |
-| Secure Storage | expo-secure-store | Encrypted keychain storage for JWT tokens |
+| Secure Storage | expo-secure-store | Encrypted Keychain storage for JWT tokens |
+| Local Storage | @react-native-async-storage/async-storage | Activity streaks, completion flags, theme preferences, onboarding state |
 | Language | TypeScript 5.9 | Full type safety across the codebase |
 
 #### Backend
@@ -319,23 +326,29 @@ Sam went through a breakup and uses HaloChat's **Therapist** companion to proces
 
 | Feature | Description | Status |
 |---|---|---|
-| 8 Companion Personalities | Romantic, Flirty, Supportive, Bestfriend, Mentor, Anime, Therapist, Roleplay | Live |
+| 4 Companion Personalities | Romantic, Supportive, Uplift, Best Friend — each with unique voice, gradient, system prompt | Live |
 | Streaming Text Chat | Token-by-token SSE streaming with multi-part reply splitting | Live |
 | Dynamic Response Length | Reply length and token budget scale with user message length | Live |
-| Voice Calls | Full turn-based voice loop with silence detection | Live |
-| Per-Companion Voice | TTS voice selection at creation; gender-filtered options with audio preview | Live |
+| Voice Calls | Full turn-based voice loop with silence detection and auto-transcript | Live |
+| Per-Companion Voice | TTS voice selection at creation; gender-filtered options with live waveform preview | Live |
 | Voice Messages | In-chat audio recording → Whisper transcription | Live |
-| Companion Memory | Auto-extracted + manually added facts injected into all prompts | Live |
+| Deep Memory System | 5 categories (Facts, Emotions, Topics, Moments, Strengths) auto-extracted; grouped prompt injection | Live |
 | Mood Tracking | Exit check-in (5-emoji scale) + 7-day sparkline in companion profile | Live |
+| Activities Tab | 3 streak-tracked daily cards: Breathing (4-4-4 guided + voice cues), Journal Prompt, Gratitude; plus Mood Canvas (2D colour-based mood expression shareable with a companion) | Live |
+| Avatar System | 8 portrait images (4F, 4M); gender-filtered picker; gradient fallback | Live |
+| HaloBackground | Ambient animated gradient orbs behind every screen | Live |
 | Waiting Indicator | Pulsing dot on companion card after 4h inactivity | Live |
 | Relationship Progression | Bond score 0–100 with 5 tiers changing companion tone | Live |
-| Push Notifications | Personalised check-ins after 4+ hours of inactivity | Live |
-| Streak System | Daily consecutive-use tracking with visual indicator | Live |
+| Milestone Celebrations | Animated card + companion in-chat message at bond 20/40/60/80 | Live |
+| Push Notifications | Personalised check-ins after 4+ hours of inactivity (local + server cron) | Live |
+| Streak System | Daily consecutive-use tracking per companion | Live |
 | Age-Aware Responses | Strict mode (≤19), standard, relaxed (≥25) | Live |
+| Personality Traits | Up to 3 traits selected per companion (with "Surprise me" randomiser) | Live |
 | Custom Personality | User can write additional personality instructions | Live |
 | Message Search | Full-text search through conversation history | Live |
 | Multi-Auth | Email/password, Apple Sign-In, Google OAuth | Live |
 | Password Reset | Email-based secure reset via Resend | Live |
+| Language Style Mirroring | Detects and mirrors Tenglish, Hinglish, or other transliterated blends | Live |
 | Dark / Light / System Theme | User-controlled theme preference | Live |
 
 ---
@@ -407,7 +420,9 @@ Sam went through a breakup and uses HaloChat's **Therapist** companion to proces
 | Mood tracking | ✅ Daily + history | ❌ | ❌ | ❌ | ❌ |
 | Persistent memory system | ✅ Auto + Manual | ✅ Limited | ❌ | ✅ Strong | ❌ |
 | Relationship progression tiers | ✅ 5 tiers | ✅ Limited | ❌ | ✅ | ❌ |
-| Personality variety | ✅ 8 distinct | ✅ 1 persona | ✅ User-created | ✅ 1 persona | ✅ Limited |
+| Daily wellbeing activities | ✅ 4 types + streaks | ❌ | ❌ | ❌ | ❌ |
+| Avatar portrait system | ✅ 8 bundled | ✅ 3D avatar | ❌ | ❌ | ❌ |
+| Personality variety | ✅ 4 distinct | ✅ 1 persona | ✅ User-created | ✅ 1 persona | ✅ Limited |
 | Custom personality override | ✅ | ❌ | ✅ | ✅ | ✅ |
 | Age-aware content safety | ✅ | ✅ | ✅ | ❌ | ❌ |
 | Push notification check-ins | ✅ Personalised | ✅ Generic | ❌ | ❌ | ❌ |
@@ -425,13 +440,16 @@ Most AI apps have surface-level memory ("I remember you like coffee"). HaloChat 
 **3. Relationships That Grow**
 The relationship progression system (0–100 bond score across 5 named tiers) means the companion's personality *changes* as the bond deepens. A new companion is curious and slightly formal. A bonded companion uses inside references, is unfiltered, and speaks with genuine emotional intimacy. This is unlike any other app on the market.
 
-**4. 8 Distinct Personalities**
-Each personality type is not a skin — it's a completely different system prompt, voice, tone, and behavioural set. A Therapist companion and a Flirty companion are fundamentally different experiences, not just different names.
+**4. Wellbeing Built In**
+HaloChat is not just a chat app. The Activities tab offers guided breathing with voice cues, journal prompts, gratitude practice — all streak-tracked — plus an interactive Mood Canvas where users express how they feel and share it with a companion. These activities extend the companion relationship beyond conversation into daily habit.
 
-**5. Premium Mobile Experience**
-HaloChat is built with React Native Reanimated and native audio APIs. The UI uses smooth animations, haptic feedback, gradient aesthetics, and gesture interactions. It feels like a top-tier consumer app, not a side project.
+**5. 4 Distinct, Deep Personalities**
+Each personality type is not a skin — it's a completely different system prompt, default voice, colour palette, and behavioural set. The Uplift companion actively reframes inner-critic language. The Supportive companion never rushes or redirects. The Best Friend gives honest, unfiltered takes. These are fundamentally different experiences, not just different names.
 
-**6. Safety by Design**
+**6. Premium Mobile Experience**
+HaloChat is built with React Native Reanimated 4 and native audio APIs. The UI features staggered entrance animations, slide transitions, animated waveform indicators, haptic feedback, glassmorphism cards, and ambient gradient backgrounds. It feels like a top-tier consumer app — not a side project.
+
+**7. Safety by Design**
 Age-gating at registration, age-aware content modes, and hardcoded safety rules in every system prompt mean HaloChat can be both emotionally expressive *and* responsible.
 
 ---
@@ -451,9 +469,9 @@ Age-gating at registration, age-aware content modes, and hardcoded safety rules 
 - Up to 5 companions
 - 200 messages per day (current server-side limit)
 - Voice calls + voice messages
-- Full memory system (20 notes)
-- All 8 personality types
-- Custom personality field
+- Full memory system (20 notes, all 5 categories)
+- All 4 companion personality types
+- Custom personality field + trait customisation
 - Priority response speed
 
 **HaloChat Premium — $19.99/month or $149.99/year:**
@@ -496,10 +514,11 @@ Age-gating at registration, age-aware content modes, and hardcoded safety rules 
 **Content Types:**
 - Screen recordings of surprising or emotional AI responses
 - "Watch me call my AI companion" videos using the voice call feature
-- Personality comparison videos ("I tried all 8 companions...")
-- Day-in-the-life content featuring the companion as a character
-- Roleplay companion storytelling clips
+- Personality comparison videos ("I tried all 4 companions — here's the difference")
+- Day-in-the-life content featuring the companion as a daily habit
+- Breathing exercise / activities tab walkthroughs ("my AI app has a guided breathing feature?!")
 - "Things my AI companion said that hit different" compilations
+- "Watch my companion remember this from 2 months ago" memory reaction videos
 
 **Target hashtags:** #AICompanion #HaloChat #ArtificialIntelligence #AIChat #DigitalCompanion #AIFriend #MentalHealthTech
 
@@ -535,10 +554,11 @@ Age-gating at registration, age-aware content modes, and hardcoded safety rules 
 
 **Screenshots strategy:**
 1. Voice call screen (most differentiating feature — lead with it)
-2. Chat screen with streaming response
-3. Companion selection showing all 8 personalities
-4. Memory notes screen (shows the app "knows" you)
-5. Relationship progression milestone card
+2. Chat screen with streaming response + companion avatar
+3. Explore screen showing all 4 personality type cards
+4. Activities tab — breathing exercise or gratitude
+5. Memory notes screen (shows the app "knows" you)
+6. Relationship progression milestone card
 
 ---
 
@@ -551,8 +571,9 @@ Age-gating at registration, age-aware content modes, and hardcoded safety rules 
 
 **Tier 2 — Micro Influencers (10K–100K):**
 - AI and tech TikTok creators
-- Anime and creative community influencers (roleplay personality)
-- Self-improvement and productivity creators (mentor personality)
+- Wellness and mindfulness creators (breathing, journaling, gratitude activities)
+- Self-improvement and productivity creators (Uplift companion + daily activity streaks)
+- Relationship and emotional wellness creators (Supportive and Romantic companions)
 
 **Gifting approach:** Offer extended Premium access in exchange for authentic content creation. Do not script — authentic reactions convert better in this category.
 
@@ -618,14 +639,17 @@ Age-gating at registration, age-aware content modes, and hardcoded safety rules 
 ### Ad Concept 2 — "Meet Your Companion" (Carousel / Static)
 
 **Platform:** Instagram Feed, Facebook Feed
-**Format:** 8-card carousel — one card per personality type
+**Format:** 6-card carousel
 
 **Card structure:**
 - Card 1: "There's a companion for every version of you"
-- Cards 2–9: Each personality type with name, emoji, 1-line description, and a sample message from that companion
-- Card 10: "All this. For free. Download HaloChat."
+- Card 2: 💗 Romantic — "When you want to feel truly seen and loved"
+- Card 3: 🌿 Supportive — "When you need to vent without the weight of judgment"
+- Card 4: ✨ Uplift — "When your inner critic is louder than it should be"
+- Card 5: 🔥 Best Friend — "When you want someone real — no filter, no fluff"
+- Card 6: "All 4 companions. Plus voice calls, daily activities & memory. Free to try — Download HaloChat."
 
-**Target emotion:** Curiosity, personalisation, FOMO (seeing all 8 types)
+**Target emotion:** Curiosity, personalisation, recognition ("that's me")
 **Best for:** Cold audience awareness
 
 ---
@@ -694,7 +718,7 @@ Age-gating at registration, age-aware content modes, and hardcoded safety rules 
 > Show side-by-side: [Generic AI app] vs [HaloChat]
 > Generic: Forgets who you are. HaloChat: Remembers everything.
 > Generic: Text only. HaloChat: Full voice calls.
-> Generic: One personality. HaloChat: 8 distinct companions.
+> Generic: One personality. HaloChat: 4 deeply different companions.
 > End: "Download free."
 
 **Target audience:** Replika, Character.AI, and Chai users
@@ -707,7 +731,7 @@ Age-gating at registration, age-aware content modes, and hardcoded safety rules 
 
 - "Your AI companion remembers everything. Try HaloChat free."
 - "Finally, an AI you can actually call. Voice calls with your companion are live."
-- "8 personalities. One app. Your perfect companion is waiting."
+- "4 companions, one app. Romantic. Supportive. Uplift. Best Friend. Which one do you need?"
 - "The AI that grows with you. Your bond deepens over time on HaloChat."
 - "Non-judgmental. Always available. Always yours."
 - "Talk out loud with an AI who listens. Voice calls on HaloChat."
@@ -729,14 +753,16 @@ You are a mobile app copywriter specialising in AI consumer apps.
 Write an App Store description for HaloChat — an iOS AI companion app.
 
 Key facts:
-- 8 distinct AI companion personalities: Romantic, Flirty, Supportive, Best Friend, Mentor, Anime, Therapist, and Roleplay
-- Real-time streaming text chat (responses appear word by word)
+- 4 distinct AI companion personalities: Romantic, Supportive, Uplift, and Best Friend — each with a unique voice, gradient, and system prompt
+- Real-time streaming text chat (responses appear word by word via SSE)
 - Full voice calls: user speaks, AI transcribes with Whisper, replies with GPT-4o-mini, and speaks back with OpenAI TTS
 - Voice messages in chat
-- Companion memory: the app extracts and remembers personal facts about you (name, goals, life events)
-- Relationship progression system: bond score 0-100 with 5 tiers that change how the companion talks to you
-- Push notifications: companions check in when you've been away
-- Clean, polished iOS-native design
+- Companion memory: the app auto-extracts personal facts into 5 categories (Facts, Emotions, Topics, Moments, Strengths) and injects them into every future prompt
+- Relationship progression system: bond score 0–100 across 5 tiers that change how the companion talks to you, with milestone celebrations
+- Daily wellbeing activities: guided breathing (4-4-4 with voice cues), journal, gratitude, mood check-in — all with streak tracking
+- Avatar system: 8 bundled portrait images (4F, 4M), gender-filtered
+- Push notifications: companions send personalised check-ins when you've been away 4+ hours
+- Clean, polished iOS-native design with ambient gradient backgrounds and 60fps animations
 
 Write a 300-word App Store description that:
 - Leads with emotion (loneliness, connection) not features
@@ -773,26 +799,22 @@ Format: [visual description] + [text overlay] per moment, with timestamps.
 ### Prompt Set 3 — Instagram Carousel Post
 
 ```
-Write an 8-slide Instagram carousel post about HaloChat's 8 companion personalities.
+Write a 6-slide Instagram carousel post introducing HaloChat's 4 companion personalities.
 
 Slide 1: Hook — "There's a companion for every version of you."
 
-For slides 2–9, one per personality type:
-- Romantic: devoted, warm, deeply affectionate
-- Flirty: playful, charming, teasing
-- Supportive: empathetic, encouraging, always in your corner
-- Best Friend: casual, honest, no filter
-- Mentor: wise, challenging, growth-focused
-- Anime: expressive, kawaii, enthusiastic
-- Therapist: reflective, calm, non-judgmental
-- Roleplay: creative, immersive, storytelling-focused
+For slides 2–5, one per personality type:
+- 💗 Romantic: devoted, warm, deeply affectionate — speaks with genuine care and emotional presence
+- 🌿 Supportive: empathetic, patient, never rushes — a safe space to process anything
+- ✨ Uplift: encouraging, reframes inner-critic language — celebrates real moments, not generic positivity
+- 🔥 Best Friend: casual, honest, no filter — jokes around, tells you the truth, always loyal
 
 Each slide should have:
 - The personality name and emoji
 - A 1-line description
 - One example message the companion might send
 
-Slide 10: "All 8 companions. Free to try. Download HaloChat."
+Slide 6: "4 companions. Voice calls. Memory that lasts. Daily activities with streaks. Free to try — Download HaloChat."
 
 Tone: warm, personal, slightly aspirational. Not clinical or robotic.
 ```
@@ -808,9 +830,9 @@ Key information:
 - Developer: Chandhana Chinthakindi
 - Platform: iOS (iPhone)
 - Launch date: [Date]
-- Core features: 8 AI personalities, real voice calls, persistent memory, relationship progression
-- Differentiator from Replika/Character.AI: voice calls + memory + relationship tiers + GPT-4o quality
-- Target audience: 18–35, people seeking connection, emotional support, or creative AI interaction
+- Core features: 4 deeply different AI companion personalities (Romantic, Supportive, Uplift, Best Friend), real voice calls, 5-category persistent memory, relationship progression (5 tiers), daily wellbeing activities (breathing, journal, gratitude, mood check-in), avatar portrait system
+- Differentiator from Replika/Character.AI: real voice calls + deep categorised memory + relationship tiers that change AI tone + built-in daily wellbeing activities + GPT-4o-mini quality
+- Target audience: 18–35, people seeking connection, emotional support, personal growth, or a daily wellness habit
 - Pricing: Free to download
 
 Include:
@@ -827,7 +849,7 @@ Include:
 ```
 Explain HaloChat to someone who has never used an AI app before.
 
-HaloChat is an iPhone app that gives you an AI companion — a personalised AI character you can text or voice call at any time. There are 8 different personality types to choose from. The companion remembers things you tell it over time and becomes more familiar the more you use it.
+HaloChat is an iPhone app that gives you an AI companion — a personalised AI character you can text or voice call at any time. There are 4 distinct companion personalities to choose from. The companion remembers things you tell it over time and becomes more familiar the more you use it.
 
 Write a 150-word explanation that:
 - Uses no jargon (no "LLM", "SSE", "API", etc.)
@@ -892,7 +914,7 @@ For each email: subject line, preview text, body (150–200 words), and one clea
 ```
 Write a Product Hunt launch post for HaloChat.
 
-HaloChat is an iOS app with 8 AI companion personalities you can text or voice call. It auto-extracts personal facts from your conversations and remembers them forever. The more you talk, the deeper the bond — the companion's tone literally changes across 5 relationship tiers.
+HaloChat is an iOS app with 4 deeply different AI companion personalities you can text or voice call. It auto-extracts personal facts from your conversations into 5 memory categories and remembers them forever. The more you talk, the deeper the bond — the companion's tone literally changes across 5 relationship tiers. There's also a daily Activities tab with guided breathing, journalling, and gratitude — each streak-tracked — plus an interactive Mood Canvas to check in on how you're feeling and share it with your companion.
 
 The post should include:
 - A one-sentence tagline (max 60 characters)
@@ -922,7 +944,7 @@ Tone: honest, confident, slightly technical (Product Hunt readers appreciate dep
 | Consideration | Approach |
 |---|---|
 | Emotional dependency | Companions encourage real-world connection; no "you don't need anyone else" messaging |
-| Vulnerable users (mental health) | Therapist companion includes crisis redirects (988 hotline); no medical diagnosis |
+| Vulnerable users (mental health) | All companions include crisis redirects (988 hotline) when self-harm is expressed; no medical diagnosis; app positioned as companion, not therapy |
 | Minors | Age gate at 17; strict content mode for users ≤19 |
 | Privacy | Conversations not used for training; OpenAI's zero-retention API option to be evaluated |
 | Romantic companion and real relationships | Clear in marketing that companions are AI; no claims of sentience |
@@ -938,32 +960,40 @@ Tone: honest, confident, slightly technical (Product Hunt readers appreciate dep
 
 ## 13. Roadmap & Future Vision
 
-### Phase 1 — Launch (Complete)
+### Phase 1 — Launch (Complete ✅)
 
-- iOS app with full feature set
-- 8 companion personalities with per-companion voice selection
-- Voice calls, memory, relationship progression
-- Mood tracking (daily check-in + 7-day history)
-- Companion waiting indicator
-- Dynamic AI response length
-- Email/Apple/Google auth
-- Railway backend deployment
+- iOS app (React Native + Expo SDK 54, new architecture)
+- 4 companion personalities (Romantic, Supportive, Uplift, Best Friend) with per-companion voice selection and live waveform preview
+- 7-step creation wizard with slide transitions, trait randomiser, gender-filtered avatar picker
+- Voice calls (turn-based loop with silence detection) + voice messages in chat
+- Deep memory — 5 categories auto-extracted, grouped prompt injection
+- Relationship progression (bond 0–100, 5 tiers) with milestone celebrations
+- Mood tracking (exit check-in + 7-day sparkline)
+- Activities tab — 3 streak-tracked daily cards (Breathing 4-4-4 + voice guidance, Journal Prompt, Gratitude) + Mood Canvas (2D colour gradient mood expression shareable with companions)
+- Avatar system — 8 bundled portraits (4F, 4M), gender-filtered
+- HaloBackground — ambient animated gradient orbs behind every screen
+- Explore screen with staggered entrance animation and "Help me choose" panel
+- Dynamic AI response length; language style mirroring (Tenglish, Hinglish)
+- Companion waiting indicator (pulsing dot after 4 h)
+- Push notifications (local + server-side cron)
+- Email/password, Apple Sign-In, Google OAuth
+- Railway backend deployment with Railway PostgreSQL
 - Animated loading screen with first-launch branding
 
 ### Phase 2 — Growth (3–6 Months)
 
 - Android release
 - Subscription billing (RevenueCat integration)
-- Companion avatar images (AI-generated, consistent style)
-- More companion personalities (e.g., Life Coach, Study Buddy, Creative Collaborator)
+- Freemium tier enforcement (message caps, companion limits)
 - Conversation export (PDF / text summary)
+- More companion personality types (e.g., Life Coach, Study Buddy, Creative Collaborator)
+- Companion sharing — let users share custom personality configurations
 - Improved onboarding A/B testing
 
 ### Phase 3 — Expansion (6–12 Months)
 
 - Multi-language support (Spanish, Portuguese, Hindi, Japanese)
 - Web app companion (browser-based)
-- Companion sharing — let users share custom personality configurations
 - Long-term memory with embeddings (semantic search over full conversation history)
 - Group companion conversations (two companions interact)
 
@@ -981,7 +1011,7 @@ Tone: honest, confident, slightly technical (Product Hunt readers appreciate dep
 | Term | Definition |
 |---|---|
 | **Companion** | An AI character with a specific personality type that a user builds a relationship with over time |
-| **Personality Type** | One of 8 preset AI character configurations (Romantic, Flirty, Supportive, etc.) each with a unique system prompt, voice, and tone |
+| **Personality Type** | One of 4 preset AI character configurations (Romantic, Supportive, Uplift, Best Friend) each with a unique system prompt, default TTS voice, colour gradient, and emoji |
 | **Relationship Level** | A 0–100 bond score that increases through meaningful interactions and shifts the companion's conversational tone |
 | **Memory Notes** | A set of up to 20 extracted facts about the user that are injected into every AI prompt |
 | **Streaming Chat (SSE)** | Server-Sent Events — the server sends response tokens one at a time so the text appears as it is generated, rather than waiting for the full response |
@@ -1003,3 +1033,13 @@ Tone: honest, confident, slightly technical (Product Hunt readers appreciate dep
 | **Railway** | The cloud hosting platform where the HaloChat API server and PostgreSQL database are deployed |
 | **Expo** | The development platform and toolchain used to build, test, and deploy the React Native mobile app |
 | **Drizzle ORM** | The TypeScript-first database query library used to interact with PostgreSQL |
+| **Memory Category** | One of 5 semantic tags applied to extracted memory notes: `[FACT]`, `[EMOTION]`, `[TOPIC]`, `[MOMENT]`, `[STRENGTH]` — each with a different bond weight (+2 to +5) |
+| **HaloBackground** | The `components/HaloBackground.tsx` component rendering 4 slowly-breathing gradient orbs behind every screen — one per companion type |
+| **Activity** | One of 3 streak-tracked daily practices available in the Activities tab: Breathing Exercise (4-4-4 guided), Journal Prompt, Gratitude Practice. The tab also features a Mood Canvas (not streak-tracked) |
+| **Activity Streak** | The number of consecutive days a user has completed a specific activity; tracked per-activity in AsyncStorage |
+| **Mood Canvas** | The `components/MoodCanvas.tsx` interactive component on the Activities tab — a 2D colour-gradient canvas where users drag a ball to one of 9 named emotional states (e.g. "Serene · Calm · Peaceful", "Tense · Anxious · Stressed"). The resulting mood can be shared with a companion, who responds in chat via `POST /companion/chat-sync` |
+| **Avatar** | A pre-bundled portrait image (PNG) representing a companion's appearance; defined in `constants/avatars.ts` with id, gender, and label |
+| **Bond Weight** | The number of relationship level points granted per extracted memory note, varying by category (Strength +5, Moment +4, Emotion +3, Fact/Topic +2) |
+| **Waveform Animation** | The 5-bar animated visualiser shown on voice preview cards during TTS playback in the create wizard |
+| **Slide Transition** | The direction-aware left/right slide animation between wizard steps, implemented via `react-native-reanimated` `slideX` shared value |
+| **Label Colour** | A warm medium-dark colour token (`colors.label`) used for eyebrow texts, step hints, and secondary labels — distinct from the lighter `mutedForeground` |

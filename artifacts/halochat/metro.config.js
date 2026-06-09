@@ -24,6 +24,7 @@ const pnpmPackages = [
   "expo-auth-session",
   "expo-web-browser",
   "expo-apple-authentication",
+  "expo-speech",
 ];
 config.resolver.extraNodeModules = pnpmPackages.reduce((acc, pkg) => {
   const symlink = path.resolve(projectRoot, "node_modules", pkg);

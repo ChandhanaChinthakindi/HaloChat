@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -10,12 +11,14 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { type Message } from "@/context/CompanionContext";
+import { getAvatarById } from "@/constants/avatars";
 import { useColors } from "@/hooks/useColors";
 
 interface Props {
   message: Message;
   companionGradient: [string, string];
   companionInitials: string;
+  companionAvatarId?: string;
   isStreaming?: boolean;
   isNew?: boolean;
   selected?: boolean;
@@ -32,6 +35,7 @@ export function ChatBubble({
   message,
   companionGradient,
   companionInitials,
+  companionAvatarId,
   isStreaming,
   isNew,
   selected,
@@ -41,6 +45,7 @@ export function ChatBubble({
 }: Props) {
   const colors = useColors();
   const isUser = message.role === "user";
+  const avatar = getAvatarById(companionAvatarId);
 
   const translateY = useSharedValue(isNew ? 14 : 0);
   const opacity = useSharedValue(isNew ? 0 : 1);
@@ -59,7 +64,7 @@ export function ChatBubble({
   }));
 
   const timestamp = message.id.startsWith("__") ? null : (
-    <Text style={[styles.timestamp, { color: colors.mutedForeground }]}>
+    <Text style={[styles.timestamp, { color: colors.foreground }]}>
       {formatTime(message.timestamp)}
     </Text>
   );
@@ -82,7 +87,7 @@ export function ChatBubble({
         <View style={styles.userBubbleWrapper}>
           <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={350}>
             <LinearGradient
-              colors={selected ? ["#9CA3AF", "#6B7280"] : [colors.primary, colors.accent]}
+              colors={selected ? ["#9CA3AF", "#6B7280"] : [companionGradient[1], companionGradient[0]]}
               style={styles.userBubble}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
@@ -97,7 +102,7 @@ export function ChatBubble({
                 <Ionicons
                   name={status === "seen" ? "checkmark-done" : "checkmark"}
                   size={11}
-                  color={status === "seen" ? colors.primary : colors.mutedForeground}
+                  color={status === "seen" ? companionGradient[0] : colors.mutedForeground}
                 />
               )}
             </View>
@@ -107,31 +112,39 @@ export function ChatBubble({
     );
   }
 
+  // Companion bubble tint: very light wash of companion's first gradient color
+  const bubbleTint = selected ? colors.muted : "rgba(255,253,248,0.35)";
+  const bubbleBorder = selected ? colors.primary : `${companionGradient[0]}55`;
+
   return (
     <Animated.View style={[styles.assistantRow, animStyle]}>
       {selectionDot}
-      <LinearGradient
-        colors={companionGradient}
-        style={styles.smallAvatar}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        <Text style={styles.smallAvatarText}>{companionInitials[0]}</Text>
-      </LinearGradient>
+      {/* Mini avatar — photo if available, else gradient circle */}
+      <View style={styles.smallAvatarWrap}>
+        {avatar?.source ? (
+          <Image
+            source={avatar.source}
+            style={styles.smallAvatarImg}
+            contentFit="cover"
+            contentPosition={{ top: 0 }}
+          />
+        ) : (
+          <LinearGradient
+            colors={companionGradient}
+            style={styles.smallAvatar}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Text style={styles.smallAvatarText}>{companionInitials[0]}</Text>
+          </LinearGradient>
+        )}
+      </View>
       <View style={styles.assistantContent}>
         <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={350}>
-          <View
-            style={[
-              styles.assistantBubble,
-              {
-                backgroundColor: selected ? colors.muted : colors.card,
-                borderColor: selected ? colors.primary : colors.border,
-              },
-            ]}
-          >
+          <View style={[styles.assistantBubble, { backgroundColor: bubbleTint, borderColor: bubbleBorder }]}>
             <Text style={[styles.assistantText, { color: colors.foreground }]}>
               {message.content}
-              {isStreaming && <Text style={{ color: colors.primary }}>▋</Text>}
+              {isStreaming && <Text style={{ color: companionGradient[0] }}>▋</Text>}
             </Text>
           </View>
         </Pressable>
@@ -146,30 +159,33 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     flexDirection: "row",
     justifyContent: "flex-end",
-    marginBottom: 12,
-    paddingLeft: 48,
+    marginBottom: 14,
+    paddingLeft: 64,
     paddingRight: 16,
     gap: 8,
   },
-  userBubbleWrapper: {
-    alignItems: "flex-end",
-    gap: 3,
-  },
+  userBubbleWrapper: { alignItems: "flex-end", gap: 4 },
   assistantRow: {
     flexDirection: "row",
     alignItems: "flex-end",
-    marginBottom: 12,
+    marginBottom: 14,
     paddingLeft: 16,
-    paddingRight: 48,
-    gap: 8,
+    paddingRight: 64,
+    gap: 10,
   },
-  assistantContent: { flex: 1, gap: 3 },
+  assistantContent: { flex: 1, gap: 4 },
+
   userBubble: {
-    borderRadius: 20,
-    borderBottomRightRadius: 4,
+    borderRadius: 22,
+    borderBottomRightRadius: 5,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    maxWidth: "100%",
+    // Soft shadow
+    shadowColor: "#5A3A2A",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 4,
   },
   userText: {
     fontSize: 15,
@@ -177,50 +193,55 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     lineHeight: 22,
   },
+
   assistantBubble: {
-    borderRadius: 20,
-    borderBottomLeftRadius: 4,
+    borderRadius: 22,
+    borderBottomLeftRadius: 5,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    maxWidth: "100%",
     borderWidth: 1,
+    // Soft shadow
+    shadowColor: "#5A3A2A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+    elevation: 2,
   },
   assistantText: {
     fontSize: 15,
     fontFamily: "Inter_400Regular",
     lineHeight: 22,
   },
+
+  smallAvatarWrap: { flexShrink: 0 },
   smallAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
-    flexShrink: 0,
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.55)",
+  },
+  smallAvatarImg: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    overflow: "hidden",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.55)",
   },
   smallAvatarText: {
     fontSize: 12,
-    fontWeight: "700" as const,
+    fontWeight: "700",
     color: "#FFFFFF",
     fontFamily: "Inter_700Bold",
   },
-  timestamp: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    alignSelf: "flex-end",
-  },
-  userMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-  },
+
+  timestamp: { fontSize: 12, fontFamily: "Inter_400Regular", alignSelf: "flex-end" },
+  userMeta: { flexDirection: "row", alignItems: "center", gap: 3 },
   selectionDot: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
+    width: 20, height: 20, borderRadius: 10, borderWidth: 1.5,
+    alignItems: "center", justifyContent: "center", flexShrink: 0,
   },
 });

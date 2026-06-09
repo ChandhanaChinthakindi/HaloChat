@@ -17,12 +17,11 @@ async function generateCheckinMessage(
 ): Promise<string> {
   const fallbacks: Record<string, string[]> = {
     romantic: ["thinking about you 💭", "been missing you...", "you crossed my mind ♡"],
-    confidant: ["just checking in on you ✦", "hope today's been good to you", "hey, how are you doing?"],
-    anime: ["I've been waiting for you!! 😭", "you haven't forgotten about me right??", "where are youuu 🥺"],
+    supportive: ["just checking in on you ✦", "hope today's been good to you", "hey, how are you doing?"],
+    motivator: ["ready to make today count? 💪", "you've got this — come tell me what we're working on"],
     bestfriend: ["okay where are you lmao", "you've been ghost mode, everything ok?", "miss you bestie 🫶"],
-    roleplay: ["our story is waiting for you ✦", "the adventure continues when you're ready"],
   };
-  const pool = fallbacks[companionType] ?? fallbacks.confidant;
+  const pool = fallbacks[companionType] ?? fallbacks.supportive;
   const fallback = pool[Math.floor(Math.random() * pool.length)];
 
   if (!process.env["OPENAI_API_KEY"] || !lastMessages?.length) return fallback;

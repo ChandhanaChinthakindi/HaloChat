@@ -30,6 +30,7 @@ function SettingRow({
   onPress,
   destructive,
   value,
+  iconGradient,
   children,
 }: {
   icon: any;
@@ -38,56 +39,40 @@ function SettingRow({
   onPress?: () => void;
   destructive?: boolean;
   value?: string;
+  iconGradient?: [string, string];
   children?: React.ReactNode;
 }) {
   const colors = useColors();
+  const defaultGradient: [string, string] = [colors.primary, colors.accent];
+  const destructiveGradient: [string, string] = ["#EF4444", "#DC2626"];
+  const gradient = destructive ? destructiveGradient : (iconGradient ?? defaultGradient);
+
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
         styles.row,
-        {
-          backgroundColor: colors.card,
-          borderColor: colors.border,
-          opacity: pressed && onPress ? 0.75 : 1,
-        },
+        { backgroundColor: colors.card, opacity: pressed && onPress ? 0.75 : 1 },
       ]}
     >
-      <View
-        style={[
-          styles.rowIcon,
-          {
-            backgroundColor: destructive
-              ? "rgba(239,68,68,0.12)"
-              : colors.muted,
-          },
-        ]}
+      <LinearGradient
+        colors={gradient}
+        style={styles.rowIcon}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
       >
-        <Ionicons
-          name={icon}
-          size={18}
-          color={destructive ? colors.destructive : colors.primary}
-        />
-      </View>
+        <Ionicons name={icon} size={17} color="#FFFFFF" />
+      </LinearGradient>
       <View style={styles.rowContent}>
-        <Text
-          style={[
-            styles.rowLabel,
-            { color: destructive ? colors.destructive : colors.foreground },
-          ]}
-        >
+        <Text style={[styles.rowLabel, { color: destructive ? colors.destructive : colors.foreground }]}>
           {label}
         </Text>
         {subtitle && (
-          <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>
-            {subtitle}
-          </Text>
+          <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>{subtitle}</Text>
         )}
       </View>
       {children ?? (value ? (
-        <Text style={[styles.rowValue, { color: colors.mutedForeground }]}>
-          {value}
-        </Text>
+        <Text style={[styles.rowValue, { color: colors.mutedForeground }]}>{value}</Text>
       ) : onPress ? (
         <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
       ) : null)}
@@ -221,7 +206,14 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Profile */}
-        <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.profileCard, { backgroundColor: colors.card }]}>
+          {/* Gradient header strip */}
+          <LinearGradient
+            colors={["#9A4B6B", "#D8A48F"]}
+            style={styles.profileCardHeader}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+          />
           <View style={styles.profileTop}>
             <LinearGradient colors={["#818263", "#BB8588"]} style={styles.profileAvatar} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
               <Text style={styles.profileInitial}>
@@ -326,6 +318,7 @@ export default function SettingsScreen() {
           icon="notifications-outline"
           label="Check-in Notifications"
           subtitle="Get notified when your companion misses you"
+          iconGradient={["#F59E0B", "#EF4444"]}
         >
           <Switch
             value={notificationsEnabled}
@@ -338,6 +331,7 @@ export default function SettingsScreen() {
           icon="phone-portrait-outline"
           label="Haptic Feedback"
           subtitle="Vibrations for interactions and responses"
+          iconGradient={["#6366F1", "#8B5CF6"]}
         >
           <Switch
             value={hapticsEnabled}
@@ -356,17 +350,19 @@ export default function SettingsScreen() {
           label="AI Model"
           subtitle="Powered by OpenAI"
           value="GPT-4o mini"
+          iconGradient={["#7C3AED", "#EC4899"]}
         />
 
         {/* About */}
         <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>
           ABOUT
         </Text>
-        <SettingRow icon="information-circle-outline" label="Version" value="1.0.0" />
+        <SettingRow icon="information-circle-outline" label="Version" value="1.0.0" iconGradient={["#818263", "#A3A380"]} />
         <SettingRow
           icon="shield-checkmark-outline"
           label="Privacy"
           subtitle="Your data is stored securely on our servers"
+          iconGradient={["#10B981", "#059669"]}
           onPress={() =>
             Alert.alert(
               "Privacy",
@@ -428,19 +424,37 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
   },
   content: { padding: 16, gap: 8 },
-  profileCard: { borderRadius: 20, borderWidth: 1, marginBottom: 8, padding: 16 },
+  profileCard: {
+    borderRadius: 24,
+    overflow: "hidden",
+    marginBottom: 8,
+    // No border, just shadow
+    shadowColor: "#5A3A2A",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  profileCardHeader: {
+    height: 56,
+    width: "100%",
+  },
   profileTop: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    padding: 16,
+    marginTop: -28, // Pull up to overlap the gradient header
   },
   profileAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
   },
   profileInitial: {
     fontSize: 22,
@@ -479,26 +493,31 @@ const styles = StyleSheet.create({
   profileDetailRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   profileDetailText: { fontSize: 13, fontFamily: "Inter_400Regular", flex: 1 },
   sectionTitle: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600" as const,
     fontFamily: "Inter_600SemiBold",
-    letterSpacing: 1,
+    letterSpacing: 0.5,
     paddingHorizontal: 4,
-    paddingTop: 8,
-    paddingBottom: 4,
+    paddingTop: 12,
+    paddingBottom: 6,
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 14,
     padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
+    borderRadius: 18,
+    // Shadow instead of border
+    shadowColor: "#5A3A2A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 2,
   },
   rowIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -519,10 +538,14 @@ const styles = StyleSheet.create({
   },
   themeRow: {
     flexDirection: "row",
-    borderRadius: 16,
-    borderWidth: 1,
+    borderRadius: 18,
     padding: 6,
     gap: 4,
+    shadowColor: "#5A3A2A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 2,
   },
   themeOption: {
     flex: 1,
@@ -530,8 +553,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingVertical: 11,
+    borderRadius: 13,
   },
   themeLabel: {
     fontSize: 13,

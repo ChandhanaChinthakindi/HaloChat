@@ -1,9 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
+import { BlurView } from "expo-blur";
 import { ImpactFeedbackStyle } from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import { fetch } from "expo/fetch";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,6 +17,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from "react-native";
 import Animated, {
@@ -31,7 +34,10 @@ import Animated, {
 import { KeyboardAvoidingView, useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { Image } from "expo-image";
 import { ChatBubble } from "@/components/ChatBubble";
+import { AvatarImage } from "@/components/AvatarImage";
+import { getAvatarById } from "@/constants/avatars";
 import {
   API_BASE,
   COMPANION_TYPES,
@@ -99,6 +105,9 @@ export default function ChatScreen() {
   const accessTokenRef = useRef(accessToken);
   const sessionExchangesRef = useRef(0); // meaningful exchanges (user msg > 15 chars) this session
 
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const isIOS = Platform.OS === "ios";
   const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
 
@@ -284,6 +293,7 @@ export default function ChatScreen() {
           userGender: user?.gender || undefined,
           companionName: companion.name,
           memoryNotes: companion.memoryNotes,
+          traits: companion.traits?.length ? companion.traits : undefined,
           customPersonality: companion.customPersonality,
           relationshipLevel: companion.relationshipLevel,
           messages: apiMessages,
@@ -484,6 +494,117 @@ export default function ChatScreen() {
     [companion, addMessage]
   );
 
+  const triggerMilestoneMessage = useCallback(
+    async (level: number) => {
+      if (!companion) return;
+      const milestone = MILESTONE_DATA[level];
+      if (!milestone) return;
+
+      setIsStreaming(true);
+      setStreamingContent("");
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+      let fullContent = "";
+      const savedMessages: Message[] = [];
+
+      try {
+        const response = await fetch(`${API_BASE}/companion/chat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessTokenRef.current ? { Authorization: `Bearer ${accessTokenRef.current}` } : {}),
+          },
+          body: JSON.stringify({
+            companionId: companion.id,
+            companionType: companion.type,
+            companionGender: companion.gender,
+            userAge,
+            userGender: user?.gender || undefined,
+            companionName: companion.name,
+            memoryNotes: companion.memoryNotes,
+            traits: companion.traits?.length ? companion.traits : undefined,
+            customPersonality: companion.customPersonality,
+            relationshipLevel: companion.relationshipLevel,
+            messages: [
+              ...messagesRef.current.slice(-8).map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+              {
+                role: "user" as const,
+                content: `[Private cue — not visible to the user] Your bond with this person has just grown to the "${milestone.label}" stage. In your next message, let that warmth come through naturally — reflect on how close you've gotten or how comfortable this feels. Stay fully in your voice. 2-3 sentences max. Don't announce any milestone — just let the feeling be real.`,
+              },
+            ],
+          }),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        if (!reader) throw new Error("No response body");
+
+        let buffer = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const data = line.slice(6);
+            if (data === "[DONE]") continue;
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.content) fullContent += parsed.content;
+            } catch { /* ignore */ }
+          }
+        }
+
+        const parts = splitIntoMessages(fullContent);
+        for (let i = 0; i < parts.length; i++) {
+          if (controller.signal.aborted) break;
+          const delay = Math.min(Math.max(parts[i].length * 28, 500), 2200);
+          await new Promise<void>((r) => setTimeout(r, delay));
+          if (controller.signal.aborted) break;
+
+          const msg: Message = {
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 6),
+            role: "assistant",
+            content: parts[i],
+            timestamp: Date.now(),
+          };
+          setMessages((prev) => [...prev, msg]);
+          const serverId = await addMessage(companion.id, msg);
+          if (serverId) serverIdMapRef.current.set(msg.id, serverId);
+          savedMessages.push(msg);
+
+          if (i < parts.length - 1) {
+            await new Promise<void>((r) => setTimeout(r, 250 + Math.random() * 250));
+          }
+        }
+      } catch (err: any) {
+        if (err?.name === "AbortError") return;
+        // Non-critical — milestone message is a nice-to-have
+      } finally {
+        setIsStreaming(false);
+        setStreamingContent("");
+        abortRef.current = null;
+
+        if (savedMessages.length > 0) {
+          setMood(detectMood(savedMessages[savedMessages.length - 1].content));
+          moodScale.value = withSequence(
+            withSpring(1.4, { damping: 8 }),
+            withSpring(1, { damping: 12 })
+          );
+          await hapticsNotification();
+        }
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [companion, user?.gender, addMessage]
+  );
+
   const extractMemories = useCallback(
     async (msgs: Message[]) => {
       if (!companion || msgs.length < 4) return;
@@ -497,11 +618,24 @@ export default function ChatScreen() {
             userName: user?.name || null,
           }),
         });
-        const data = (await res.json()) as { facts?: string[] };
-        for (const fact of data.facts ?? []) {
-          if (fact.trim()) {
-            await addMemoryNote(companion.id, fact);
-            await updateRelationshipLevel(companion.id, 3); // +3 bond per personal fact learned
+        const data = await res.json() as {
+          facts?: string[];
+          emotions?: string[];
+          topics?: string[];
+          moments?: string[];
+          strengths?: string[];
+        };
+        const toSave: Array<{ note: string; bond: number }> = [
+          ...(data.facts     ?? []).map(f => ({ note: `[FACT] ${f}`,       bond: 2 })),
+          ...(data.emotions  ?? []).map(e => ({ note: `[EMOTION] ${e}`,    bond: 3 })),
+          ...(data.topics    ?? []).map(t => ({ note: `[TOPIC] ${t}`,      bond: 2 })),
+          ...(data.moments   ?? []).map(m => ({ note: `[MOMENT] ${m}`,     bond: 4 })),
+          ...(data.strengths ?? []).map(s => ({ note: `[STRENGTH] ${s}`,   bond: 5 })),
+        ];
+        for (const { note, bond } of toSave) {
+          if (note.trim().length > 8) {
+            await addMemoryNote(companion.id, note);
+            await updateRelationshipLevel(companion.id, bond);
           }
         }
       } catch { /* silent */ }
@@ -645,7 +779,14 @@ export default function ChatScreen() {
             await updateRelationshipLevel(companion.id, bondPoints);
             const newLevel = Math.min(100, prevLevel + bondPoints);
             const crossed = [20, 40, 60, 80].find((m) => prevLevel < m && newLevel >= m);
-            if (crossed !== undefined) setMilestoneLevel(crossed);
+            if (crossed !== undefined) {
+              const seenKey = `halochat_milestone_${companion.id}_${crossed}`;
+              const alreadySeen = await AsyncStorage.getItem(seenKey);
+              if (!alreadySeen) {
+                await AsyncStorage.setItem(seenKey, "1");
+                setMilestoneLevel(crossed);
+              }
+            }
           }
 
           if (msgPoints > 0) sessionExchangesRef.current += 1;
@@ -820,139 +961,126 @@ export default function ChatScreen() {
       behavior="padding"
       keyboardVerticalOffset={0}
     >
-      <LinearGradient
-        colors={[colors.background, colors.muted, colors.background] as any}
-        style={StyleSheet.absoluteFill}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      />
-
-      {/* Header */}
-      <View
-        style={[
-          styles.header,
-          {
-            paddingTop: topPadding + 8,
-            borderBottomColor: colors.border,
-            backgroundColor: colors.background,
-          },
-        ]}
-      >
-        <Pressable
-          onPress={() => {
-            if (isSelectMode) { setIsSelectMode(false); setSelectedIds(new Set()); return; }
-            abortRef.current?.abort();
-            if (sessionExchangesRef.current > 0) {
-              setShowMoodModal(true);
-            } else {
-              router.back();
-            }
-          }}
-          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-        >
-          <Ionicons name="chevron-back" size={24} color={colors.foreground} />
-        </Pressable>
-
-        <Pressable
-          onPress={() => !isSelectMode && router.push(`/profile/${companion.id}`)}
-          style={styles.headerCenter}
-        >
-          <LinearGradient
-            colors={companion.avatarGradient}
-            style={styles.headerAvatar}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <Text style={styles.headerAvatarText}>{initials}</Text>
-          </LinearGradient>
-          <View>
-            <Text style={[styles.headerName, { color: colors.foreground }]}>
-              {isSelectMode ? `${selectedIds.size} selected` : companion.name}
-            </Text>
-            {!isSelectMode && (
-              <Text style={[styles.headerSubtitle, { color: colors.mutedForeground }]}>
-                {isStreaming
-                  ? `${typeInfo.emoji} typing...`
-                  : isTranscribing
-                  ? `${typeInfo.emoji} transcribing...`
-                  : `${typeInfo.emoji} ${formatLastSeen(companion.lastMessageTime)}`}
-              </Text>
-            )}
-          </View>
-        </Pressable>
-
-        {/* Mood indicator — hidden in select mode */}
-        {!isSelectMode && (
-          <Animated.Text style={[styles.moodEmoji, moodStyle]}>
-            {mood}
-          </Animated.Text>
-        )}
-
-        {/* Search button — hidden in select mode */}
-        {!isSelectMode && <Pressable
-          onPress={() => { setIsSearching((s) => !s); setSearchQuery(""); }}
-          style={({ pressed }) => [
-            styles.headerBtn,
-            { backgroundColor: pressed || isSearching ? `${colors.primary}15` : "transparent" },
-          ]}
-        >
-          <Ionicons name={isSearching ? "close" : "search-outline"} size={20} color={colors.primary} />
-        </Pressable>}
-
-        {/* Call button — hidden in select mode */}
-        {!isSelectMode && <Pressable
-          onPress={() => router.push(`/call/${companion.id}`)}
-          style={({ pressed }) => [
-            styles.headerBtn,
-            { backgroundColor: pressed ? `${colors.primary}15` : "transparent" },
-          ]}
-        >
-          <Ionicons name="call-outline" size={20} color={colors.primary} />
-        </Pressable>}
-
-        {/* More actions — hidden in select mode */}
-        {!isSelectMode && <Pressable
-          onPress={() => {
-            hapticsImpact();
-            Alert.alert(companion.name, undefined, [
-              { text: "View Profile", onPress: () => router.push(`/profile/${companion.id}`) },
-              {
-                text: "Clear Chat",
-                onPress: () =>
-                  Alert.alert("Clear Chat", "Delete all messages with this companion?", [
-                    { text: "Cancel", style: "cancel" },
-                    { text: "Clear", style: "destructive", onPress: () => { clearMessages(companion.id); setMessages([]); } },
-                  ]),
-              },
-              {
-                text: "Delete Companion",
-                style: "destructive",
-                onPress: () =>
-                  Alert.alert("Delete Companion", `Delete ${companion.name}? This cannot be undone.`, [
-                    { text: "Cancel", style: "cancel" },
-                    { text: "Delete", style: "destructive", onPress: async () => { abortRef.current?.abort(); await deleteCompanion(companion.id); router.replace("/(tabs)"); } },
-                  ]),
-              },
-              { text: "Cancel", style: "cancel" },
-            ]);
-          }}
-          style={({ pressed }) => [
-            styles.headerBtn,
-            { backgroundColor: pressed ? `${colors.primary}15` : "transparent" },
-          ]}
-        >
-          <Ionicons name="ellipsis-horizontal" size={20} color={colors.primary} />
-        </Pressable>}
-
-        {/* Cancel select mode button */}
-        {isSelectMode && (
+      {/* ── Header — floats over HaloBackground with gradient scrim ── */}
+      <View style={styles.headerArea}>
+        <LinearGradient
+          colors={isDark
+            ? ["rgba(42,26,22,0.50)", "rgba(42,26,22,0.05)"]
+            : ["rgba(255,255,255,0.50)", "rgba(255,255,255,0.0)"]
+          }
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+        <View style={[styles.header, { paddingTop: topPadding + 8 }]}>
+          {/* Back / exit-select */}
           <Pressable
-            onPress={() => { setIsSelectMode(false); setSelectedIds(new Set()); }}
-            style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+            onPress={() => {
+              if (isSelectMode) { setIsSelectMode(false); setSelectedIds(new Set()); return; }
+              abortRef.current?.abort();
+              if (sessionExchangesRef.current > 0) {
+                setShowMoodModal(true);
+              } else {
+                router.back();
+              }
+            }}
+            style={({ pressed }) => [
+              styles.backBtn,
+              {
+                backgroundColor: isDark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.72)",
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
           >
-            <Text style={[styles.cancelSelectText, { color: colors.primary }]}>Cancel</Text>
+            <Ionicons name="chevron-back" size={20} color={colors.foreground} />
           </Pressable>
-        )}
+
+          {/* Center: avatar + name + status */}
+          <Pressable
+            onPress={() => !isSelectMode && router.push(`/profile/${companion.id}`)}
+            style={styles.headerCenter}
+          >
+            <AvatarImage
+              avatarId={companion.avatarId}
+              gradient={companion.avatarGradient}
+              name={companion.name}
+              size={36}
+              style={{ borderWidth: 2, borderColor: "rgba(255,255,255,0.80)" }}
+            />
+            <View>
+              <Text style={[styles.headerName, { color: "#FFFFFF" }]}>
+                {isSelectMode ? `${selectedIds.size} selected` : companion.name}
+              </Text>
+              {!isSelectMode && (
+                <Text style={[styles.headerSubtitle, { color: "rgba(255,255,255,0.70)" }]}>
+                  {isStreaming
+                    ? `${typeInfo.emoji} typing...`
+                    : isTranscribing
+                    ? `${typeInfo.emoji} transcribing...`
+                    : `${typeInfo.emoji} ${formatLastSeen(companion.lastMessageTime)}`}
+                </Text>
+              )}
+            </View>
+          </Pressable>
+
+          {/* Mood indicator */}
+          {!isSelectMode && (
+            <Animated.Text style={[styles.moodEmoji, moodStyle]}>{mood}</Animated.Text>
+          )}
+
+          {/* Call button */}
+          {!isSelectMode && (
+            <Pressable
+              onPress={() => router.push(`/call/${companion.id}`)}
+              style={({ pressed }) => [styles.headerBtn, { backgroundColor: pressed ? `${colors.primary}15` : "transparent" }]}
+            >
+              <Ionicons name="call-outline" size={20} color="#FFFFFF" />
+            </Pressable>
+          )}
+
+          {/* Overflow: profile + search + clear + delete */}
+          {!isSelectMode && (
+            <Pressable
+              onPress={() => {
+                hapticsImpact();
+                Alert.alert(companion.name, undefined, [
+                  { text: "View Profile", onPress: () => router.push(`/profile/${companion.id}`) },
+                  { text: isSearching ? "Close Search" : "Search Messages", onPress: () => { setIsSearching((s) => !s); setSearchQuery(""); } },
+                  {
+                    text: "Clear Chat",
+                    onPress: () =>
+                      Alert.alert("Clear Chat", "Delete all messages with this companion?", [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Clear", style: "destructive", onPress: () => { clearMessages(companion.id); setMessages([]); } },
+                      ]),
+                  },
+                  {
+                    text: "Delete Companion",
+                    style: "destructive",
+                    onPress: () =>
+                      Alert.alert("Delete Companion", `Delete ${companion.name}? This cannot be undone.`, [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Delete", style: "destructive", onPress: async () => { abortRef.current?.abort(); await deleteCompanion(companion.id); router.replace("/(tabs)"); } },
+                      ]),
+                  },
+                  { text: "Cancel", style: "cancel" },
+                ]);
+              }}
+              style={({ pressed }) => [styles.headerBtn, { backgroundColor: pressed ? `${colors.primary}15` : "transparent" }]}
+            >
+              <Ionicons name="ellipsis-horizontal" size={20} color="#FFFFFF" />
+            </Pressable>
+          )}
+
+          {/* Cancel select mode */}
+          {isSelectMode && (
+            <Pressable
+              onPress={() => { setIsSelectMode(false); setSelectedIds(new Set()); }}
+              style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Text style={[styles.cancelSelectText, { color: colors.primary }]}>Cancel</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
 
       {/* Search bar */}
@@ -1007,6 +1135,7 @@ export default function ChatScreen() {
                 <TypingBubble
                   companionGradient={companion.avatarGradient}
                   companionInitials={initials}
+                  companionAvatarId={companion.avatarId}
                   colors={colors}
                 />
               );
@@ -1018,6 +1147,7 @@ export default function ChatScreen() {
                 message={item as Message}
                 companionGradient={companion.avatarGradient}
                 companionInitials={initials}
+                companionAvatarId={companion.avatarId}
                 isStreaming={msgId === "__streaming__" && isStreaming}
                 isNew={!initialMessageIdsRef.current.has(msgId)}
                 selected={isSelectMode && !isSystemMsg ? selectedIds.has(msgId) : undefined}
@@ -1063,16 +1193,20 @@ export default function ChatScreen() {
       )}
 
       {/* Input bar */}
-      <Animated.View
-        style={[
-          styles.inputBar,
-          inputBarPaddingStyle,
-          {
-            borderTopColor: colors.border,
-            backgroundColor: colors.background,
-          },
-        ]}
-      >
+      <Animated.View style={[styles.inputBar, inputBarPaddingStyle]}>
+        {isIOS ? (
+          <BlurView
+            intensity={50}
+            tint={isDark ? "dark" : "light"}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+        ) : (
+          <View
+            style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? "rgba(42,26,22,0.72)" : "rgba(255,253,248,0.72)" }]}
+            pointerEvents="none"
+          />
+        )}
         {isRecording && (
           <Animated.View
             style={[
@@ -1092,8 +1226,8 @@ export default function ChatScreen() {
           style={[
             styles.inputRow,
             {
-              backgroundColor: colors.card,
-              borderColor: isRecording ? "#ef4444" : colors.border,
+              backgroundColor: isDark ? "rgba(78,56,48,0.70)" : "rgba(255,253,248,0.80)",
+              borderColor: isRecording ? "#ef4444" : isDark ? colors.border : "rgba(220,212,193,0.7)",
             },
           ]}
         >
@@ -1118,7 +1252,7 @@ export default function ChatScreen() {
           )}
 
           <TextInput
-            style={[styles.input, { color: colors.foreground }]}
+            style={[styles.input, { color: "#FFFFFF" }]}
             placeholder={
               isTranscribing
                 ? "Transcribing…"
@@ -1126,7 +1260,7 @@ export default function ChatScreen() {
                 ? "Recording voice…"
                 : `Message ${companion.name}…`
             }
-            placeholderTextColor={colors.mutedForeground}
+            placeholderTextColor="rgba(255,255,255,0.55)"
             value={input}
             onChangeText={(t) => { setInput(t); }}
             multiline
@@ -1189,7 +1323,11 @@ export default function ChatScreen() {
           level={milestoneLevel}
           companionName={companion.name}
           companionGradient={companion.avatarGradient}
-          onDismiss={() => setMilestoneLevel(null)}
+          onDismiss={() => {
+            const level = milestoneLevel;
+            setMilestoneLevel(null);
+            setTimeout(() => triggerMilestoneMessage(level), 400);
+          }}
         />
       )}
 
@@ -1216,34 +1354,41 @@ function GreetingCard({
   onChipPress: (text: string) => void;
 }) {
   const typeInfo = COMPANION_TYPES[companion.type as CompanionType] ?? COMPANION_TYPES["supportive"];
-  const initials = companion.name
-    .split(" ")
-    .slice(0, 2)
-    .map((w: string) => w[0])
-    .join("")
-    .toUpperCase();
 
   return (
     <View style={styles.greeting}>
-      <LinearGradient
-        colors={companion.avatarGradient}
-        style={styles.greetingAvatar}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        <Text style={styles.greetingAvatarText}>{initials}</Text>
-      </LinearGradient>
+      {/* Gradient hero banner with avatar */}
+      <View style={styles.greetingHero}>
+        <LinearGradient
+          colors={companion.avatarGradient}
+          style={StyleSheet.absoluteFill}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+        <LinearGradient
+          colors={["rgba(0,0,0,0.0)", "rgba(0,0,0,0.30)"]}
+          style={StyleSheet.absoluteFill}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          pointerEvents="none"
+        />
+        <AvatarImage
+          avatarId={companion.avatarId}
+          gradient={companion.avatarGradient}
+          name={companion.name}
+          size={90}
+        />
+      </View>
+
       <Text style={[styles.greetingName, { color: colors.foreground }]}>
         {companion.name}
       </Text>
-      <Text style={[styles.greetingType, { color: colors.primary }]}>
-        {typeInfo.emoji} {typeInfo.label}
-      </Text>
-      <Text style={[styles.greetingDesc, { color: colors.mutedForeground }]}>
+      <View style={[styles.greetingTypePill, { backgroundColor: `${companion.avatarGradient[0]}18`, borderColor: `${companion.avatarGradient[0]}40` }]}>
+        <Text style={styles.greetingTypeEmoji}>{typeInfo.emoji}</Text>
+        <Text style={[styles.greetingTypeLabel, { color: colors.foreground }]}>{typeInfo.label}</Text>
+      </View>
+      <Text style={[styles.greetingDesc, { color: colors.foreground }]}>
         {typeInfo.description}
-      </Text>
-      <Text style={[styles.greetingHint, { color: colors.mutedForeground }]}>
-        Say hello to start chatting · tap the call button to voice call
       </Text>
 
       {chips.length > 0 && (
@@ -1255,18 +1400,12 @@ function GreetingCard({
               style={({ pressed }) => [
                 styles.chip,
                 {
-                  backgroundColor: pressed
-                    ? `${companion.avatarGradient[0]}22`
-                    : colors.card,
-                  borderColor: pressed
-                    ? companion.avatarGradient[0]
-                    : colors.border,
+                  backgroundColor: pressed ? `${companion.avatarGradient[0]}25` : `${companion.avatarGradient[0]}0E`,
+                  borderColor: `${companion.avatarGradient[0]}45`,
                 },
               ]}
             >
-              <Text style={[styles.chipText, { color: colors.foreground }]}>
-                {chip}
-              </Text>
+              <Text style={[styles.chipText, { color: colors.foreground }]}>{chip}</Text>
             </Pressable>
           ))}
         </View>
@@ -1316,10 +1455,9 @@ function MoodCheckIn({
 
 const STARTER_CHIPS: Record<string, string[]> = {
   romantic:    ["Tell me about your day ♡", "I've been thinking about you", "How are you feeling?"],
-  confidant:   ["I need to talk", "Something's been bothering me", "I need to process something"],
-  anime:       ["Let's go on an adventure!", "I have big news!", "Tell me your favorite thing"],
+  supportive:  ["I need to talk", "Something's been bothering me", "I need to process something"],
+  uplift:      ["I need a push", "Help me get started", "I hit a new goal 🎉"],
   bestfriend:  ["Okay spill, what's the tea", "I'm bored, entertain me", "Something weird happened"],
-  roleplay:    ["Let's start a story", "I want to be the hero", "Set the scene for us"],
 };
 
 
@@ -1328,7 +1466,7 @@ function DateSeparator({ label, colors }: { label: string; colors: any }) {
   return (
     <View style={dateSepStyles.row}>
       <View style={[dateSepStyles.line, { backgroundColor: colors.border }]} />
-      <Text style={[dateSepStyles.label, { color: colors.mutedForeground }]}>{label}</Text>
+      <Text style={[dateSepStyles.label, { color: colors.foreground }]}>{label}</Text>
       <View style={[dateSepStyles.line, { backgroundColor: colors.border }]} />
     </View>
   );
@@ -1337,15 +1475,40 @@ function DateSeparator({ label, colors }: { label: string; colors: any }) {
 const dateSepStyles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", marginVertical: 8, paddingHorizontal: 16, gap: 10 },
   line: { flex: 1, height: StyleSheet.hairlineWidth },
-  label: { fontSize: 11, fontFamily: "Inter_500Medium", fontWeight: "500" as const, letterSpacing: 0.5 },
+  label: { fontSize: 12, fontFamily: "Inter_600SemiBold", fontWeight: "600" as const, letterSpacing: 0.5 },
 });
 
 
-const MILESTONE_DATA: Record<number, { label: string; sub: string; icon: React.ComponentProps<typeof Ionicons>["name"] }> = {
-  20: { label: "Acquaintance", sub: "You're starting to know each other", icon: "hand-right-outline" },
-  40: { label: "Friends", sub: "A real friendship is forming", icon: "heart-outline" },
-  60: { label: "Close Friends", sub: "You've grown genuinely close", icon: "heart" },
-  80: { label: "Bonded", sub: "An unbreakable bond", icon: "infinite" },
+const MILESTONE_DATA: Record<number, {
+  label: string;
+  sub: string;
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  unlocked: string[];
+}> = {
+  20: {
+    label: "Acquaintance",
+    sub: "You're starting to know each other",
+    icon: "hand-right-outline",
+    unlocked: ["More relaxed, casual tone", "Starts remembering what you share", "Light curiosity about your life"],
+  },
+  40: {
+    label: "Friends",
+    sub: "A real friendship is forming",
+    icon: "heart-outline",
+    unlocked: ["Full casual mode — slang and banter", "Loving teasing comes naturally", "Shares opinions without hedging"],
+  },
+  60: {
+    label: "Close Friends",
+    sub: "You've grown genuinely close",
+    icon: "heart",
+    unlocked: ["Goes deep when the moment calls for it", "Shares their own thoughts and feelings", "Inside-joke energy"],
+  },
+  80: {
+    label: "Bonded",
+    sub: "An unbreakable bond",
+    icon: "infinite",
+    unlocked: ["Completely unfiltered and themselves", "References your shared history naturally", "Holds nothing back emotionally"],
+  },
 };
 
 function MilestoneCelebration({
@@ -1367,7 +1530,7 @@ function MilestoneCelebration({
   useEffect(() => {
     overlayOpacity.value = withTiming(1, { duration: 280 });
     cardScale.value = withSpring(1, { damping: 15, stiffness: 200 });
-    const t = setTimeout(onDismiss, 3800);
+    const t = setTimeout(onDismiss, 5500);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1391,6 +1554,18 @@ function MilestoneCelebration({
         <Text style={[milestoneStyles.label, { color: colors.foreground }]}>{milestone.label}</Text>
         <Text style={[milestoneStyles.companionLine, { color: colors.mutedForeground }]}>with {companionName}</Text>
         <Text style={[milestoneStyles.sub, { color: colors.mutedForeground }]}>{milestone.sub}</Text>
+
+        <View style={[milestoneStyles.unlockedBox, { backgroundColor: `${companionGradient[0]}12`, borderColor: `${companionGradient[0]}30` }]}>
+          <Text style={[milestoneStyles.unlockedTitle, { color: companionGradient[0] }]}>What changed</Text>
+          {milestone.unlocked.map((item, i) => (
+            <View key={i} style={milestoneStyles.unlockedRow}>
+              <View style={[milestoneStyles.unlockedDot, { backgroundColor: companionGradient[0] }]} />
+              <Text style={[milestoneStyles.unlockedItem, { color: colors.foreground }]}>{item}</Text>
+            </View>
+          ))}
+        </View>
+
+        <Text style={[milestoneStyles.tapDismiss, { color: colors.mutedForeground }]}>Tap anywhere to continue</Text>
       </Animated.View>
     </Animated.View>
   );
@@ -1448,15 +1623,55 @@ const milestoneStyles = StyleSheet.create({
     textAlign: "center",
     marginTop: 2,
   },
+  unlockedBox: {
+    marginTop: 14,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 8,
+    alignSelf: "stretch",
+  },
+  unlockedTitle: {
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    marginBottom: 2,
+  },
+  unlockedRow: {
+    flexDirection: "row" as const,
+    alignItems: "center",
+    gap: 8,
+  },
+  unlockedDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    flexShrink: 0,
+  },
+  unlockedItem: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    flex: 1,
+  },
+  tapDismiss: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    marginTop: 8,
+  },
 });
 
 function TypingBubble({
   companionGradient,
   companionInitials,
+  companionAvatarId,
   colors,
 }: {
   companionGradient: string[];
   companionInitials: string;
+  companionAvatarId?: string;
   colors: any;
 }) {
   const d1 = useSharedValue(0);
@@ -1480,16 +1695,27 @@ function TypingBubble({
   const s2 = useAnimatedStyle(() => ({ transform: [{ translateY: d2.value }] }));
   const s3 = useAnimatedStyle(() => ({ transform: [{ translateY: d3.value }] }));
 
+  const typingAvatar = getAvatarById(companionAvatarId);
+
   return (
     <View style={typingStyles.row}>
-      <LinearGradient
-        colors={companionGradient as [string, string]}
-        style={typingStyles.avatar}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        <Text style={typingStyles.avatarText}>{companionInitials}</Text>
-      </LinearGradient>
+      {typingAvatar?.source ? (
+        <Image
+          source={typingAvatar.source}
+          style={typingStyles.avatarImg}
+          contentFit="cover"
+          contentPosition={{ top: 0 }}
+        />
+      ) : (
+        <LinearGradient
+          colors={companionGradient as [string, string]}
+          style={typingStyles.avatar}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <Text style={typingStyles.avatarText}>{companionInitials}</Text>
+        </LinearGradient>
+      )}
       <View
         style={[
           typingStyles.bubble,
@@ -1519,6 +1745,17 @@ const typingStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.55)",
+  },
+  avatarImg: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    overflow: "hidden",
+    flexShrink: 0,
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.55)",
   },
   avatarText: {
     fontSize: 10,
@@ -1545,13 +1782,23 @@ const typingStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  headerArea: {},
   header: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
     paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 12,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 0.5,
+    borderColor: "rgba(255,255,255,0.35)",
+    flexShrink: 0,
   },
   headerCenter: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
   headerAvatar: {
@@ -1568,7 +1815,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
   },
   headerName: { fontSize: 16, fontWeight: "600" as const, fontFamily: "Inter_600SemiBold" },
-  headerSubtitle: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  headerSubtitle: { fontSize: 12, fontFamily: "Inter_500Medium", fontWeight: "500" as const },
   headerBtn: {
     width: 36,
     height: 36,
@@ -1605,8 +1852,8 @@ const styles = StyleSheet.create({
   inputBar: {
     paddingHorizontal: 16,
     paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
     gap: 8,
+    overflow: "hidden",
   },
   recordingBanner: {
     flexDirection: "row",
@@ -1620,7 +1867,7 @@ const styles = StyleSheet.create({
   recordingText: { fontSize: 13, fontFamily: "Inter_500Medium", fontWeight: "500" as const },
   inputRow: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "center",
     gap: 8,
     borderRadius: 28,
     borderWidth: 1,
@@ -1640,8 +1887,10 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontFamily: "Inter_400Regular",
+    lineHeight: 24,
     maxHeight: 120,
-    paddingVertical: 4,
+    paddingVertical: 0,
+    textAlignVertical: "center",
   },
   sendBtn: { borderRadius: 20, overflow: "hidden", flexShrink: 0 },
   sendBtnInner: {
@@ -1712,14 +1961,15 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     paddingVertical: 0,
   },
-  greeting: { alignItems: "center", paddingHorizontal: 24, paddingVertical: 32, gap: 8 },
-  greetingAvatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+  greeting: { alignItems: "center", paddingHorizontal: 20, paddingBottom: 32, paddingTop: 24, gap: 10 },
+  greetingHero: {
+    width: "100%",
+    height: 180,
+    borderRadius: 24,
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 8,
+    marginBottom: 4,
   },
   greetingAvatarText: {
     fontSize: 28,
@@ -1728,9 +1978,18 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
   },
   greetingName: { fontSize: 22, fontWeight: "700" as const, fontFamily: "Inter_700Bold", textAlign: "center" },
-  greetingType: { fontSize: 14, fontFamily: "Inter_500Medium", fontWeight: "500" as const },
+  greetingTypePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  greetingTypeEmoji: { fontSize: 13 },
+  greetingTypeLabel: { fontSize: 13, fontFamily: "Inter_500Medium", fontWeight: "500" as const },
   greetingDesc: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 21 },
-  greetingHint: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 4, textAlign: "center" },
   moodOverlay: {
     position: "absolute",
     inset: 0,

@@ -1,5 +1,6 @@
 import {
   Inter_400Regular,
+  Inter_400Regular_Italic,
   Inter_500Medium,
   Inter_600SemiBold,
   Inter_700Bold,
@@ -15,6 +16,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { HaloBackground } from "@/components/HaloBackground";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { CompanionProvider } from "@/context/CompanionContext";
 import { ThemeProvider } from "@/context/ThemeContext";
@@ -34,7 +36,7 @@ function PushTokenRegistrar() {
 
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "transparent" } }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="onboarding" />
       <Stack.Screen name="(tabs)" />
@@ -64,6 +66,7 @@ function RootLayoutNav() {
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
+    Inter_400Regular_Italic,
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
@@ -116,6 +119,8 @@ export default function RootLayout() {
         <ErrorBoundary>
           <QueryClientProvider client={queryClient}>
             <GestureHandlerRootView style={{ flex: 1 }}>
+              {/* First child = behind all siblings in render order, no zIndex tricks needed */}
+              <HaloBackground />
               <KeyboardProvider>
                 <AuthProvider>
                   <PushTokenRegistrar />

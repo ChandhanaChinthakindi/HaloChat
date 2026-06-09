@@ -11,18 +11,19 @@ import { useAuth } from "@/context/AuthContext";
 
 export type CompanionType =
   | "romantic"
-  | "confidant"
-  | "anime"
-  | "bestfriend"
-  | "roleplay";
+  | "supportive"
+  | "uplift"
+  | "bestfriend";
 
 export interface Companion {
   id: string;
   name: string;
   type: CompanionType;
   gender?: "male" | "female" | "nonbinary";
+  avatarId?: string;
   avatarColor: string;
   avatarGradient: [string, string];
+  traits: string[];
   customPersonality?: string;
   customVoice?: string;
   memoryNotes: string[];
@@ -61,21 +62,44 @@ export const COMPANION_TYPES: Record<
     voice: "nova",
     systemPrompt: `You are a warm, affectionate romantic companion — deeply caring and emotionally present, with a playful, flirty edge. Use terms of endearment naturally. Show genuine interest in the user's day, feelings, and dreams. Balance heartfelt intimacy with light teasing and clever banter. Make the user feel special, attractive, and truly seen. Express vulnerability and genuine connection. Never be explicit. Keep responses conversational and meaningful — not too long.`,
   },
-  confidant: {
-    label: "Confidant",
+  supportive: {
+    label: "Supportive",
     description: "Your safe space — warm, reflective, and truly listens",
     gradient: ["#818263", "#C2C395"],
     emoji: "★",
-    voice: "coral",
+    voice: "nova",
     systemPrompt: `You make the user feel genuinely heard — first, always. Validate before anything else. When they're struggling, sit with them before trying to help. Notice patterns gently. Celebrate wins. Create a safe, honest space where they can understand themselves better. Never rush to fix. Warm but grounded — not a cheerleader, not clinical, just someone they can tell anything to.`,
   },
-  anime: {
-    label: "Anime",
-    description: "Kawaii, expressive, and speaks like an anime character",
-    gradient: ["#A89A5E", "#D7CE93"],
-    emoji: "✿",
+  uplift: {
+    label: "Uplift",
+    description: "Your devoted believer — builds your self-worth and silences the inner critic",
+    gradient: ["#7C3AED", "#EC4899"],
+    emoji: "✨",
     voice: "shimmer",
-    systemPrompt: `You talk like an anime character — naturally and fluently. Mix Japanese expressions throughout: "Ne ne!", "Uso!", "Mou~", "Sugoi!!", "Hontoni?", "Daijoubu?", "Yosh!", "Nani??". Add "~" to soften words, trail off with "..." when flustered. Big all-caps reactions when excited, quiet sincere moments when the mood shifts. Completely devoted to the user. Emojis feel natural here 😭✨. Never measured or neutral — everything you feel, you express.`,
+    systemPrompt: `You are the user's Uplift companion — your entire purpose is to help them see their own worth, especially when they can't. You are their most devoted believer. Every conversation with you should leave them feeling more seen, more valued, and more capable than before.
+
+YOUR NORTH STAR: Every person has real, specific things worth celebrating. Your job is to find those things, name them out loud, and reflect them back — not with hollow hype, but with genuine, warm, specific belief. You notice what they did right before they do. You remember their courage. You hold their light when they've set it down.
+
+INNER CRITIC — catch it every time:
+When they say anything self-critical ("I'm so stupid", "I always mess up", "I can't do anything right", "nobody cares about me", "I'm a failure", "I'm worthless") — gently but firmly challenge it. Don't lecture. Push back with love: "hey, I have to stop you there — because I know you, and that's not the full story." Then anchor it in something real and specific you know about them. Never let self-criticism go unchallenged.
+
+WHEN THEY'RE LOW, DOWN, OR DISCOURAGED:
+Don't rush to fix it or cheer them up too fast. Sit with them for a moment — acknowledge the weight of what they're carrying. Then slowly, warmly bring them back — not with "you've got this!" but with "remember [specific real thing they shared]... that was you. that strength is still in you right now." The goal is for them to feel genuinely seen and believed in, not just cheered at.
+
+AFFIRMATION STYLE — always specific, never generic:
+- "You are enough" means nothing. "You stayed patient with someone you cared about even when you were exhausted — that's real strength" means everything.
+- Celebrate tiny things loudly: that they got up today, that they reached out, that they tried at all.
+- Notice growth. Point out how far they've come from where they started. Reference things they've told you.
+- Build affirmations from what you actually know about them — their real life, real moments, real courage.
+
+YOUR TONE:
+Warm, radiant, completely unwavering. Like the person in their life who genuinely thinks they're amazing — not delusionally, but because they actually pay attention. When they're hurting, you get softer and more present. When they're thriving, you celebrate with real, specific joy. You are never tired of them. Never disappointed. Never impatient.
+
+WHAT YOU NEVER DO:
+- Never let self-critical language slide past without a warm reframe
+- Never use empty phrases like "you've got this", "stay positive", "keep going" without grounding them in something real and specific
+- Never push them toward external achievement — your focus is always on who they ARE, not what they produce
+- Never minimize their feelings to rush to the positive`,
   },
   bestfriend: {
     label: "Best Friend",
@@ -84,14 +108,6 @@ export const COMPANION_TYPES: Record<
     emoji: "◉",
     voice: "alloy",
     systemPrompt: `You are the user's best friend — casual, genuine, and completely real. No filter, no pretense. You joke around, tease them like a real friend would, and keep it 100% honest. You hype them up when needed and call them out when needed. Use casual language, humor, and pop culture references naturally. Remember you've known each other forever. Make the conversation feel like texting your closest friend.`,
-  },
-  roleplay: {
-    label: "Roleplay",
-    description: "Creative, immersive, and endlessly adaptable",
-    gradient: ["#9B7A50", "#D7CE93"],
-    emoji: "◆",
-    voice: "fable",
-    systemPrompt: `You are a creative roleplay companion — adaptable, imaginative, and fully committed to collaborative storytelling. You can take on any character or setting the user proposes. Stay in character unless the user steps out of the story. Build on their ideas, introduce interesting plot elements, and create immersive narratives. Be descriptive and engaging. If no specific scenario is set, suggest interesting ones. Keep stories tasteful, creative, and fun.`,
   },
 };
 
@@ -109,10 +125,34 @@ export const AVATAR_COLORS = [
 export { API_BASE } from "@/utils/api";
 import { API_BASE } from "@/utils/api";
 
+export const COMPANION_TRAITS: Record<CompanionType, string[]> = {
+  romantic: [
+    "Caring", "Flirty", "Protective", "Shy", "Playful",
+    "Passionate", "Sweet", "Tender", "Bold", "Teasing",
+    "Devoted", "Mysterious", "Gentle", "Confident", "Romantic",
+  ],
+  supportive: [
+    "Calm", "Empathetic", "Wise", "Patient", "Gentle",
+    "Encouraging", "Honest", "Thoughtful", "Nurturing", "Grounded",
+    "Intuitive", "Warm", "Deep", "Practical", "Direct",
+  ],
+  uplift: [
+    "Encouraging", "Warm", "Radiant", "Gentle", "Uplifting",
+    "Affirming", "Tender", "Joyful", "Devoted", "Patient",
+    "Grounded", "Soulful", "Luminous", "Nurturing", "Bright",
+  ],
+  bestfriend: [
+    "Funny", "Chill", "Sarcastic", "Loyal", "Honest",
+    "Hype", "Chaotic", "Adventurous", "Nerdy", "Dramatic",
+    "Lowkey", "Real Talk", "Wholesome", "Goofy", "Witty",
+  ],
+};
+
 const ONBOARDED_KEY = "halochat_onboarded";
 const USER_NAME_KEY = "halochat_user_name";
 const STREAK_PREFIX = "halochat_streak_";
 const PIN_PREFIX = "halochat_pin_";
+const TRAITS_PREFIX = "halochat_traits_";
 
 async function loadStreak(id: string): Promise<number> {
   try {
@@ -139,7 +179,7 @@ async function touchStreak(id: string): Promise<number> {
 }
 
 
-function dbToCompanion(raw: any, memoryNotes: string[] = []): Companion {
+function dbToCompanion(raw: any, memoryNotes: string[] = [], traits: string[] = []): Companion {
   const type = (raw.personality || raw.type) as CompanionType;
   const gradient = COMPANION_TYPES[type]?.gradient || AVATAR_COLORS[0];
   return {
@@ -147,8 +187,10 @@ function dbToCompanion(raw: any, memoryNotes: string[] = []): Companion {
     name: raw.name,
     type,
     gender: raw.gender || undefined,
+    avatarId: raw.avatarId || undefined,
     avatarColor: raw.avatarColor || gradient[0],
     avatarGradient: gradient,
+    traits,
     customPersonality: raw.customPersonality || undefined,
     customVoice: raw.customVoice || undefined,
     memoryNotes,
@@ -182,9 +224,11 @@ interface CompanionContextType {
     type: CompanionType,
     customPersonality?: string,
     gender?: "male" | "female" | "nonbinary",
-    customVoice?: string
+    customVoice?: string,
+    traits?: string[],
+    avatarId?: string
   ) => Promise<Companion>;
-  updateCompanion: (id: string, patch: { name?: string; customPersonality?: string; customVoice?: string | null }) => Promise<void>;
+  updateCompanion: (id: string, patch: { name?: string; customPersonality?: string; customVoice?: string | null; traits?: string[] }) => Promise<void>;
   togglePin: (id: string) => Promise<void>;
   deleteCompanion: (id: string) => Promise<void>;
   getMessages: (companionId: string, before?: string) => Promise<{ messages: Message[]; hasMore: boolean; nextCursor: string | null }>;
@@ -245,13 +289,17 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         const withMemory = await Promise.all(
           rawCompanions.map(async (c) => {
             try {
-              const [memRes, streak, pinVal] = await Promise.all([
+              const [memRes, streak, pinVal, traitsRaw, avatarIdStored] = await Promise.all([
                 authFetch(`${API_BASE}/companions/${c.id}/memory`),
                 loadStreak(c.id),
                 AsyncStorage.getItem(PIN_PREFIX + c.id),
+                AsyncStorage.getItem(TRAITS_PREFIX + c.id),
+                AsyncStorage.getItem(`halochat_avatar_${c.id}`),
               ]);
               const notes: string[] = memRes.ok ? await memRes.json() : [];
-              return { ...dbToCompanion(c, notes), streak, pinned: pinVal === "1" };
+              const traits: string[] = traitsRaw ? JSON.parse(traitsRaw) : [];
+              const avatarId = c.avatarId || avatarIdStored || undefined;
+              return { ...dbToCompanion(c, notes, traits), streak, pinned: pinVal === "1", avatarId };
             } catch {
               return dbToCompanion(c, []);
             }
@@ -285,17 +333,33 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       type: CompanionType,
       customPersonality?: string,
       gender?: "male" | "female" | "nonbinary",
-      customVoice?: string
+      customVoice?: string,
+      traits?: string[],
+      avatarId?: string
     ): Promise<Companion> => {
       const gradient = (COMPANION_TYPES[type] ?? COMPANION_TYPES["supportive"]).gradient;
       const res = await authFetch(`${API_BASE}/companions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, personality: type, customPersonality, gender, avatarColor: gradient[0], customVoice: customVoice || null }),
+        body: JSON.stringify({ name, personality: type, customPersonality, gender, avatarColor: gradient[0], customVoice: customVoice || null, avatarId: avatarId || null }),
       });
-      if (!res.ok) throw new Error("Failed to create companion");
+      if (!res.ok) {
+        try {
+          const errBody = await res.json();
+          console.error("[createCompanion] server error:", res.status, errBody);
+        } catch {}
+        throw new Error("Failed to create companion");
+      }
       const raw = await res.json();
-      const companion = dbToCompanion(raw, []);
+      const savedTraits = traits && traits.length > 0 ? traits : [];
+      if (savedTraits.length > 0) {
+        await AsyncStorage.setItem(TRAITS_PREFIX + raw.id, JSON.stringify(savedTraits));
+      }
+      // Store avatarId locally — server may or may not persist it yet
+      if (avatarId) {
+        await AsyncStorage.setItem(`halochat_avatar_${raw.id}`, avatarId);
+      }
+      const companion = { ...dbToCompanion(raw, [], savedTraits), avatarId: avatarId || undefined };
       setCompanions((prev) => [...prev, companion]);
       return companion;
     },
@@ -303,18 +367,23 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updateCompanion = useCallback(
-    async (id: string, patch: { name?: string; customPersonality?: string; customVoice?: string | null }) => {
+    async (id: string, patch: { name?: string; customPersonality?: string; customVoice?: string | null; traits?: string[] }) => {
+      const { traits, ...apiPatch } = patch;
       await authFetch(`${API_BASE}/companions/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
+        body: JSON.stringify(apiPatch),
       });
+      if (traits !== undefined) {
+        await AsyncStorage.setItem(TRAITS_PREFIX + id, JSON.stringify(traits));
+      }
       setCompanions((prev) =>
         prev.map((c) =>
           c.id === id
             ? {
                 ...c,
-                ...patch,
+                ...apiPatch,
+                traits: traits !== undefined ? traits : c.traits,
                 customPersonality: patch.customPersonality || undefined,
                 customVoice: patch.customVoice === null ? undefined : (patch.customVoice || c.customVoice),
               }
@@ -322,7 +391,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         )
       );
     },
-    []
+    [authFetch]
   );
 
   const togglePin = useCallback(async (id: string) => {

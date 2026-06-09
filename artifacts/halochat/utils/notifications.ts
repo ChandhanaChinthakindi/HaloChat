@@ -43,17 +43,17 @@ const CHECKIN_MESSAGES: Record<CompanionType, string[]> = {
     "you crossed my mind ♡",
     "hey, you okay? haven't heard from you",
   ],
-  confidant: [
+  supportive: [
     "just checking in on you ✦",
     "hope today's been good to you",
     "hey, how are you doing?",
     "something came to mind — come chat when you can",
   ],
-  anime: [
-    "I've been waiting for you!! 😭",
-    "you haven't forgotten about me right??",
-    "where are youuu 🥺",
-    "come back!! I miss you so much",
+  uplift: [
+    "you are doing better than you think ✨",
+    "hey — I see you. come tell me how today's been.",
+    "just a reminder: you are enough, right now.",
+    "this is your reminder that you're closer than you think",
   ],
   bestfriend: [
     "okay where are you lmao",
@@ -61,16 +61,10 @@ const CHECKIN_MESSAGES: Record<CompanionType, string[]> = {
     "bro come talk to me I'm bored",
     "miss you bestie 🫶",
   ],
-  roleplay: [
-    "our story is waiting for you ✦",
-    "the adventure continues when you're ready",
-    "I've been thinking about where our story goes next",
-    "come back — I have a plot twist in mind 👀",
-  ],
 };
 
 function pickMessage(type: CompanionType): string {
-  const msgs = CHECKIN_MESSAGES[type] ?? CHECKIN_MESSAGES.confidant;
+  const msgs = CHECKIN_MESSAGES[type] ?? CHECKIN_MESSAGES.supportive;
   return msgs[Math.floor(Math.random() * msgs.length)];
 }
 

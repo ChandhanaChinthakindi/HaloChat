@@ -31,7 +31,7 @@ const SLIDES = [
   },
   {
     title: "Every Kind\nof Bond",
-    subtitle: "Romantic, confidant, best friend, or storyteller — find the connection you need right now",
+    subtitle: "Romantic, supportive, motivating, or best friend — find the connection you need right now",
     gradient: ["#9A4B6B", "#D8A48F"] as [string, string],
     icon: "heart" as const,
   },
@@ -133,16 +133,13 @@ export default function OnboardingScreen() {
 
   return (
     <LinearGradient
-      colors={[colors.background, colors.muted]}
+      colors={[colors.background, colors.surface]}
       style={[styles.container, { paddingTop: topPadding, paddingBottom: bottomPadding }]}
     >
-      {/* Ambient glow behind content */}
-      <View
-        style={[
-          styles.glow,
-          { backgroundColor: activeGradient[0] },
-        ]}
-      />
+      {/* Large ambient glow */}
+      <View style={[styles.glow, { backgroundColor: activeGradient[0] }]} />
+      {/* Secondary smaller glow */}
+      <View style={[styles.glowSmall, { backgroundColor: activeGradient[1] }]} />
 
       {/* Top bar: back + dots + spacer */}
       <View style={styles.topBar}>
@@ -190,14 +187,18 @@ export default function OnboardingScreen() {
       <Animated.View style={[styles.center, contentStyle]}>
         {isNameStep ? (
           <>
-            <LinearGradient
-              colors={NAME_GRADIENT}
-              style={styles.iconCircle}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <Ionicons name="person" size={48} color="#FFFFFF" />
-            </LinearGradient>
+            <View style={[styles.iconHalo, { borderColor: `${NAME_GRADIENT[0]}28` }]}>
+              <View style={[styles.iconHaloInner, { borderColor: `${NAME_GRADIENT[0]}18` }]}>
+                <LinearGradient
+                  colors={NAME_GRADIENT}
+                  style={styles.iconCircle}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Ionicons name="person" size={52} color="#FFFFFF" />
+                </LinearGradient>
+              </View>
+            </View>
 
             <Text style={[styles.tag, { color: activeGradient[0] }]}>
               One last thing
@@ -238,14 +239,19 @@ export default function OnboardingScreen() {
           </>
         ) : (
           <>
-            <LinearGradient
-              colors={SLIDES[step].gradient}
-              style={styles.iconCircle}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <Ionicons name={SLIDES[step].icon} size={48} color="#FFFFFF" />
-            </LinearGradient>
+            {/* Outer halo ring */}
+            <View style={[styles.iconHalo, { borderColor: `${SLIDES[step].gradient[0]}28` }]}>
+              <View style={[styles.iconHaloInner, { borderColor: `${SLIDES[step].gradient[0]}18` }]}>
+                <LinearGradient
+                  colors={SLIDES[step].gradient}
+                  style={styles.iconCircle}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Ionicons name={SLIDES[step].icon} size={52} color="#FFFFFF" />
+                </LinearGradient>
+              </View>
+            </View>
 
             <Text style={[styles.title, { color: colors.foreground }]}>
               {SLIDES[step].title}
@@ -284,12 +290,32 @@ const styles = StyleSheet.create({
   },
   glow: {
     position: "absolute",
-    width: 320,
-    height: 320,
-    borderRadius: 160,
-    top: "18%",
+    width: 360,
+    height: 360,
+    borderRadius: 180,
+    top: "10%",
     alignSelf: "center",
-    opacity: 0.07,
+    opacity: 0.13,
+  },
+  glowSmall: {
+    position: "absolute",
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    top: "30%",
+    right: "-10%",
+    opacity: 0.08,
+  },
+  iconHalo: {
+    borderRadius: 110,
+    borderWidth: 1.5,
+    padding: 12,
+    marginBottom: 4,
+  },
+  iconHaloInner: {
+    borderRadius: 95,
+    borderWidth: 1,
+    padding: 10,
   },
   topBar: {
     flexDirection: "row",

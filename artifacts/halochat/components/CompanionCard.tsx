@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -12,22 +13,33 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { COMPANION_TYPES, type Companion } from "@/context/CompanionContext";
-import { useColors } from "@/hooks/useColors";
+import { getAvatarById } from "@/constants/avatars";
 
-const WAITING_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4 hours
+const WAITING_THRESHOLD_MS = 4 * 60 * 60 * 1000;
+
+// Type-tinted bottom overlay — adds personality while keeping text readable
+const TYPE_OVERLAY: Record<string, [string, string, string]> = {
+  romantic:   ["transparent", "rgba(154,  75, 107, 0.20)", "rgba(120,  40,  75, 0.52)"],
+  supportive: ["transparent", "rgba(129, 130,  99, 0.20)", "rgba( 90,  95,  60, 0.52)"],
+  uplift:     ["transparent", "rgba(124,  58, 237, 0.20)", "rgba( 90,  30, 190, 0.55)"],
+  bestfriend: ["transparent", "rgba( 90, 122,  94, 0.20)", "rgba( 50,  90,  55, 0.52)"],
+};
+const FALLBACK_OVERLAY: [string, string, string] = [
+  "transparent", "rgba(0,0,0,0.18)", "rgba(0,0,0,0.52)",
+];
 
 interface Props {
   companion: Companion;
   onPress: () => void;
-  onCallPress?: () => void;
   onLongPress?: () => void;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export function CompanionCard({ companion, onPress, onCallPress, onLongPress }: Props) {
-  const colors = useColors();
+export function CompanionCard({ companion, onPress, onLongPress }: Props) {
   const scale = useSharedValue(1);
+  const avatar = getAvatarById(companion.avatarId);
+  const hasAvatar = !!avatar?.source;
 
   const isWaiting =
     (companion.messageCount ?? 0) >= 2 &&
@@ -39,139 +51,82 @@ export function CompanionCard({ companion, onPress, onCallPress, onLongPress }: 
   }));
 
   const typeInfo = COMPANION_TYPES[companion.type] ?? COMPANION_TYPES["supportive"];
-  const initials = companion.name
-    .split(" ")
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
-
-  const relPercent = companion.relationshipLevel;
-  const relLabel =
-    relPercent < 20
-      ? "New"
-      : relPercent < 40
-      ? "Acquaintance"
-      : relPercent < 60
-      ? "Friend"
-      : relPercent < 80
-      ? "Close"
-      : "Bonded";
-
-  const timeAgo = companion.lastMessageTime
-    ? formatTime(companion.lastMessageTime)
-    : null;
+  const overlayColors = TYPE_OVERLAY[companion.type] ?? FALLBACK_OVERLAY;
 
   return (
     <AnimatedPressable
-      style={animStyle}
+      style={[styles.card, animStyle]}
       onPress={onPress}
       onLongPress={onLongPress}
-      onPressIn={() => {
-        scale.value = withSpring(0.97, { damping: 15, stiffness: 300 });
-      }}
-      onPressOut={() => {
-        scale.value = withSpring(1, { damping: 15, stiffness: 300 });
-      }}
+      onPressIn={() => { scale.value = withSpring(0.96, { damping: 15, stiffness: 300 }); }}
+      onPressOut={() => { scale.value = withSpring(1, { damping: 15, stiffness: 300 }); }}
     >
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-          },
-        ]}
-      >
-        <View>
+      {/* Avatar — full bleed image or gradient fallback */}
+      {hasAvatar ? (
+        <Image
+          source={avatar!.source}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          contentPosition={{ top: 0 }}
+        />
+      ) : (
+        <LinearGradient
+          colors={companion.avatarGradient}
+          style={StyleSheet.absoluteFill}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+      )}
+
+      {/* Overlays — only shown when avatar image is present */}
+      {hasAvatar && (
+        <>
           <LinearGradient
-            colors={companion.avatarGradient}
-            style={styles.avatar}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <Text style={styles.initials}>{initials}</Text>
-          </LinearGradient>
-          {isWaiting && <WaitingDot />}
-        </View>
+            colors={["rgba(0,0,0,0.15)", "transparent"]}
+            style={styles.topVignette}
+            pointerEvents="none"
+          />
+          <LinearGradient
+            colors={overlayColors}
+            style={styles.bottomOverlay}
+            pointerEvents="none"
+          />
+        </>
+      )}
 
-        <View style={styles.content}>
-          <View style={styles.topRow}>
-            <Text style={[styles.name, { color: colors.foreground }]} numberOfLines={1}>
-              {companion.name}
-            </Text>
-            {companion.pinned && (
-              <Ionicons name="pin" size={12} color={colors.primary} style={{ marginRight: 2 }} />
-            )}
-            {timeAgo && (
-              <Text style={[styles.time, { color: colors.mutedForeground }]}>
-                {timeAgo}
-              </Text>
-            )}
+      {/* Top badges */}
+      <View style={styles.topRow}>
+        {companion.pinned && (
+          <View style={styles.pinBadge}>
+            <Ionicons name="pin" size={9} color="#FFF" />
           </View>
-
-          <View style={styles.typeRow}>
-            <Text style={[styles.typeTag, { color: colors.primary }]}>
-              {typeInfo.emoji} {typeInfo.label}
-            </Text>
-            <Text style={[styles.relLabel, { color: colors.mutedForeground }]}>
-              {relLabel}
-            </Text>
-            {(companion.streak ?? 0) > 1 && (
-              <View style={[styles.streakBadge, { backgroundColor: "rgba(251,146,60,0.12)" }]}>
-                <Text style={styles.streakText}>🔥 {companion.streak}</Text>
-              </View>
-            )}
+        )}
+        <View style={{ flex: 1 }} />
+        {(companion.streak ?? 0) > 1 && (
+          <View style={styles.streakBadge}>
+            <Text style={styles.streakText}>🔥 {companion.streak}</Text>
           </View>
+        )}
+      </View>
 
-          {companion.lastMessage ? (
-            <Text
-              style={[styles.lastMessage, { color: isWaiting ? colors.primary : colors.mutedForeground }]}
-              numberOfLines={1}
-            >
-              {isWaiting ? `${companion.name} is thinking of you...` : companion.lastMessage}
-            </Text>
-          ) : (
-            <Text style={[styles.noMessage, { color: colors.mutedForeground }]}>
-              Start a conversation...
-            </Text>
-          )}
-
-          <View style={styles.bondRow}>
-            <View style={[styles.bondTrack, { backgroundColor: colors.muted }]}>
-              <LinearGradient
-                colors={companion.avatarGradient}
-                style={[styles.bondFill, { width: `${relPercent}%` as any }]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              />
-            </View>
+      {/* Info — bottom-anchored when avatar present, centered when gradient-only */}
+      <View style={hasAvatar ? styles.bottomInfo : styles.centeredInfo}>
+        <Text
+          style={[styles.name, !hasAvatar && styles.nameCentered]}
+          numberOfLines={1}
+        >
+          {companion.name}
+        </Text>
+        <View style={styles.typePill}>
+          <Text style={styles.typeEmoji}>{typeInfo.emoji}</Text>
+          <Text style={styles.typeLabel}>{typeInfo.label}</Text>
+        </View>
+        {isWaiting && (
+          <View style={[styles.waitingPill, !hasAvatar && { alignSelf: "auto" }]}>
+            <WaitingDot />
+            <Text style={styles.waitingText}>thinking of you</Text>
           </View>
-        </View>
-
-        {/* Right actions */}
-        <View style={styles.rightActions}>
-          {onCallPress && (
-            <Pressable
-              onPress={(e) => {
-                e.stopPropagation?.();
-                onCallPress();
-              }}
-              style={({ pressed }) => [
-                styles.callBtn,
-                {
-                  backgroundColor: pressed
-                    ? `${colors.primary}20`
-                    : `${colors.primary}12`,
-                  borderColor: `${colors.primary}30`,
-                },
-              ]}
-            >
-              <Ionicons name="call-outline" size={15} color={colors.primary} />
-            </Pressable>
-          )}
-          <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
-        </View>
+        )}
       </View>
     </AnimatedPressable>
   );
@@ -179,119 +134,119 @@ export function CompanionCard({ companion, onPress, onCallPress, onLongPress }: 
 
 function WaitingDot() {
   const opacity = useSharedValue(1);
-
   useEffect(() => {
     opacity.value = withRepeat(
-      withSequence(
-        withTiming(0.2, { duration: 900 }),
-        withTiming(1, { duration: 900 })
-      ),
-      -1,
-      false
+      withSequence(withTiming(0.3, { duration: 700 }), withTiming(1, { duration: 700 })),
+      -1, false
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
   const dotStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
-
-  return (
-    <Animated.View
-      style={[
-        styles.waitingDot,
-        dotStyle,
-      ]}
-    />
-  );
-}
-
-function formatTime(timestamp: number): string {
-  const diff = Date.now() - timestamp;
-  const mins = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-  if (mins < 1) return "now";
-  if (mins < 60) return `${mins}m`;
-  if (hours < 24) return `${hours}h`;
-  return `${days}d`;
+  return <Animated.View style={[styles.waitingDot, dotStyle]} />;
 }
 
 const styles = StyleSheet.create({
   card: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 20,
-    borderWidth: 1,
-    marginHorizontal: 16,
-    marginBottom: 10,
-    gap: 12,
+    flex: 1,
+    height: 240,
+    borderRadius: 24,
+    overflow: "hidden",
+    borderWidth: 0.5,
+    borderColor: "rgba(255,255,255,0.35)",
+    shadowColor: "#A78BFA",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 8,
   },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
+  topVignette: {
+    position: "absolute",
+    top: 0, left: 0, right: 0,
+    height: 60,
   },
-  initials: {
-    fontSize: 20,
-    fontWeight: "700" as const,
-    color: "#FFFFFF",
-    fontFamily: "Inter_700Bold",
+  bottomOverlay: {
+    position: "absolute",
+    left: 0, right: 0, bottom: 0,
+    height: 130,
   },
-  content: { flex: 1, gap: 3 },
   topRow: {
+    position: "absolute",
+    top: 12, left: 12, right: 12,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+  },
+  pinBadge: {
+    backgroundColor: "rgba(255,255,255,0.25)",
+    borderRadius: 10,
+    padding: 5,
+  },
+  streakBadge: {
+    backgroundColor: "rgba(0,0,0,0.35)",
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  streakText: {
+    fontSize: 11,
+    color: "#FFF",
+    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
+  },
+  // Avatar present → text anchored to bottom
+  bottomInfo: {
+    position: "absolute",
+    bottom: 14, left: 14, right: 14,
+    gap: 5,
+  },
+  // No avatar → text centered in card
+  centeredInfo: {
+    position: "absolute",
+    top: 0, bottom: 0, left: 14, right: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
   },
   name: {
-    fontSize: 16,
-    fontWeight: "600" as const,
-    fontFamily: "Inter_600SemiBold",
-    flex: 1,
+    fontSize: 17,
+    fontWeight: "700",
+    fontFamily: "Inter_700Bold",
+    color: "#FFFFFF",
+    letterSpacing: -0.3,
   },
-  time: { fontSize: 12, fontFamily: "Inter_400Regular" },
-  typeRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  typeTag: { fontSize: 12, fontFamily: "Inter_500Medium" },
-  relLabel: { fontSize: 11, fontFamily: "Inter_400Regular" },
-  lastMessage: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
-  noMessage: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    fontStyle: "italic",
-    marginTop: 2,
+  nameCentered: {
+    textAlign: "center",
   },
-  bondRow: { marginTop: 6 },
-  bondTrack: { height: 3, borderRadius: 2, overflow: "hidden" },
-  bondFill: { height: 3, borderRadius: 2 },
-  streakBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
-  streakText: { fontSize: 11, fontFamily: "Inter_500Medium" },
-  rightActions: {
+  typePill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    flexShrink: 0,
+    gap: 4,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
-  callBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  typeEmoji: { fontSize: 11 },
+  typeLabel: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.92)",
+    fontFamily: "Inter_400Regular",
+  },
+  waitingPill: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
+    alignSelf: "flex-start",
+    gap: 4,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
   waitingDot: {
-    position: "absolute",
-    bottom: 1,
-    right: 1,
-    width: 13,
-    height: 13,
-    borderRadius: 7,
-    backgroundColor: "#818263",
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
+    width: 6, height: 6, borderRadius: 3,
+    backgroundColor: "#4ADE80",
+  },
+  waitingText: {
+    fontSize: 10,
+    color: "#FFF",
+    fontFamily: "Inter_400Regular",
   },
 });

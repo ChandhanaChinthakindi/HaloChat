@@ -2,236 +2,141 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
-import React, { useRef, useState } from "react";
+import React from "react";
 import {
   Alert,
+  Dimensions,
   FlatList,
   Platform,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
+  useColorScheme,
   View,
 } from "react-native";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CompanionCard } from "@/components/CompanionCard";
-import { COMPANION_TYPES, useCompanions, type Companion } from "@/context/CompanionContext";
+import { useCompanions, type Companion } from "@/context/CompanionContext";
 import { useColors } from "@/hooks/useColors";
 import { hapticsImpact } from "@/utils/haptics";
+
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const CARD_GAP = 12;
+const CARD_H_PAD = 16;
+const CARD_WIDTH = (SCREEN_WIDTH - CARD_H_PAD * 2 - CARD_GAP) / 2;
+
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
 
 export default function CompanionsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
   const { companions, deleteCompanion, togglePin, isLoaded, loadError, retryLoad } = useCompanions();
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const searchInputRef = useRef<TextInput>(null);
 
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
   const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
 
-  // Animate search bar height: 0 → 52
-  const searchHeight = useSharedValue(0);
-  const searchOpacity = useSharedValue(0);
-  const searchBarStyle = useAnimatedStyle(() => ({
-    height: searchHeight.value,
-    opacity: searchOpacity.value,
-    overflow: "hidden",
-  }));
-
-  const openSearch = () => {
-    setIsSearching(true);
-    searchHeight.value = withTiming(52, { duration: 220 });
-    searchOpacity.value = withTiming(1, { duration: 220 });
-    setTimeout(() => searchInputRef.current?.focus(), 230);
-    hapticsImpact();
-  };
-
-  const closeSearch = () => {
-    searchInputRef.current?.blur();
-    searchHeight.value = withTiming(0, { duration: 180 });
-    searchOpacity.value = withTiming(0, { duration: 180 });
-    setTimeout(() => {
-      setIsSearching(false);
-      setSearchQuery("");
-    }, 180);
-  };
-
-  const handlePress = (companion: Companion) => {
-    router.push(`/chat/${companion.id}`);
-  };
-
-  const handleCallPress = (companion: Companion) => {
-    router.push(`/call/${companion.id}`);
-  };
+  const handlePress = (companion: Companion) => router.push(`/chat/${companion.id}`);
 
   const handleLongPress = (companion: Companion) => {
     hapticsImpact(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert(
-      companion.name,
-      "What would you like to do?",
-      [
-        { text: "View Profile", onPress: () => router.push(`/profile/${companion.id}`) },
-        {
-          text: companion.pinned ? "Unpin" : "Pin to top",
-          onPress: () => togglePin(companion.id),
-        },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            Alert.alert(
-              "Delete Companion",
-              `Are you sure you want to delete ${companion.name}? All conversations will be lost.`,
-              [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Delete",
-                  style: "destructive",
-                  onPress: () => deleteCompanion(companion.id),
-                },
-              ]
-            );
-          },
-        },
-        { text: "Cancel", style: "cancel" },
-      ]
-    );
+    Alert.alert(companion.name, "What would you like to do?", [
+      { text: "View Profile", onPress: () => router.push(`/profile/${companion.id}`) },
+      { text: companion.pinned ? "Unpin" : "Pin to top", onPress: () => togglePin(companion.id) },
+      {
+        text: "Delete", style: "destructive",
+        onPress: () => Alert.alert(
+          "Delete Companion",
+          `Delete ${companion.name}? All conversations will be lost.`,
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Delete", style: "destructive", onPress: () => deleteCompanion(companion.id) },
+          ]
+        ),
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
-  const q = searchQuery.trim().toLowerCase();
-  const filtered = q
-    ? companions.filter(
-        (c) =>
-          c.name.toLowerCase().includes(q) ||
-          (COMPANION_TYPES[c.type] ?? COMPANION_TYPES["supportive"]).label.toLowerCase().includes(q)
-      )
-    : companions;
-
-  const sorted = [...filtered].sort((a, b) => {
-    if (!q) {
-      if (a.pinned && !b.pinned) return -1;
-      if (!a.pinned && b.pinned) return 1;
-    }
+  const sorted = [...companions].sort((a, b) => {
+    if (a.pinned && !b.pinned) return -1;
+    if (!a.pinned && b.pinned) return 1;
     return (b.lastMessageTime ?? b.createdAt) - (a.lastMessageTime ?? a.createdAt);
   });
 
   const showError = loadError && companions.length === 0;
   const showEmpty = !showError && companions.length === 0;
-  const showNoResults = !showEmpty && !showError && q.length > 0 && sorted.length === 0;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View
-        style={[
-          styles.header,
-          { paddingTop: topPadding + 16, borderBottomColor: colors.border },
-        ]}
-      >
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
-            HaloChat
-          </Text>
-          <Text style={[styles.headerSub, { color: colors.mutedForeground }]}>
-            {showEmpty
-              ? "No companions yet"
-              : q
-              ? `${sorted.length} result${sorted.length !== 1 ? "s" : ""}`
-              : `${companions.length} companion${companions.length > 1 ? "s" : ""}`}
-          </Text>
-        </View>
 
-        <View style={styles.headerActions}>
-          {companions.length > 0 && (
-            <Pressable
-              onPress={isSearching ? closeSearch : openSearch}
-              style={({ pressed }) => [
-                styles.iconBtn,
-                {
-                  backgroundColor:
-                    pressed || isSearching
-                      ? `${colors.primary}15`
-                      : "transparent",
-                },
-              ]}
-            >
-              <Ionicons
-                name={isSearching ? "close" : "search-outline"}
-                size={20}
-                color={isSearching ? colors.primary : colors.foreground}
-              />
-            </Pressable>
-          )}
+      {/* ── Header — floats transparently over HaloBackground ──────── */}
+      <View style={styles.headerArea}>
+        {/* Soft gradient scrim: just enough contrast for text, fades to nothing */}
+        <LinearGradient
+          colors={
+            isDark
+              ? ["rgba(42,26,22,0.78)", "rgba(42,26,22,0.0)"]
+              : ["rgba(255,255,255,0.62)", "rgba(255,255,255,0.0)"]
+          }
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
 
+        {/* Top row: greeting + New button */}
+        <View style={[styles.topRow, { paddingTop: topPadding + 14 }]}>
+          <Text style={[styles.greeting, { color: colors.foreground }]}>
+            {getGreeting()}
+          </Text>
           <Pressable
             onPress={() => router.push("/(tabs)/explore")}
-            style={({ pressed }) => [styles.addButton, { opacity: pressed ? 0.8 : 1 }]}
+            style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}
           >
             <LinearGradient
-              colors={[colors.primary, colors.accent]}
-              style={styles.addButtonInner}
+              colors={["#E8A0C8", "#B890D8"]}
+              style={styles.newBtn}
               start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
+              end={{ x: 1, y: 0 }}
             >
-              <Ionicons name="add" size={24} color="#FFFFFF" />
+              <Ionicons name="add" size={15} color="#FFFFFF" />
+              <Text style={styles.newBtnText}>New</Text>
             </LinearGradient>
           </Pressable>
         </View>
+
+        {/* Title */}
+        <View style={styles.titleRow}>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+            Your Companions
+          </Text>
+        </View>
       </View>
 
-      {/* Animated search bar */}
-      <Animated.View style={searchBarStyle}>
-        <View
-          style={[
-            styles.searchBar,
-            { backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-        >
-          <Ionicons name="search-outline" size={16} color={colors.mutedForeground} />
-          <TextInput
-            ref={searchInputRef}
-            style={[styles.searchInput, { color: colors.foreground }]}
-            placeholder="Search by name or type..."
-            placeholderTextColor={colors.mutedForeground}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            returnKeyType="search"
-            autoCorrect={false}
-          />
-          {searchQuery.length > 0 && (
-            <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
-              <Ionicons name="close-circle" size={16} color={colors.mutedForeground} />
-            </Pressable>
-          )}
-        </View>
-      </Animated.View>
-
-      {/* List states */}
+      {/* ── Content ────────────────────────────────────────────────── */}
       {!isLoaded ? (
-        <LoadingSkeleton colors={colors} />
+        <LoadingSkeleton />
       ) : showError ? (
-        <ErrorState onRetry={retryLoad} colors={colors} />
+        <ErrorState onRetry={retryLoad} />
       ) : showEmpty ? (
         <EmptyState />
-      ) : showNoResults ? (
-        <NoResults query={searchQuery} colors={colors} />
       ) : (
         <FlatList
           data={sorted}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={[styles.list, { paddingBottom: bottomPadding + 100 }]}
+          numColumns={2}
+          columnWrapperStyle={styles.row}
+          contentContainerStyle={[styles.list, { paddingBottom: bottomPadding + 110 }]}
           renderItem={({ item }) => (
             <CompanionCard
               companion={item}
               onPress={() => handlePress(item)}
-              onCallPress={() => handleCallPress(item)}
               onLongPress={() => handleLongPress(item)}
             />
           )}
@@ -244,73 +149,34 @@ export default function CompanionsScreen() {
   );
 }
 
-function LoadingSkeleton({ colors }: { colors: any }) {
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function LoadingSkeleton() {
+  const colors = useColors();
   return (
-    <View style={{ flex: 1, paddingTop: 16, paddingHorizontal: 16, gap: 12 }}>
-      {[0, 1, 2].map((i) => (
-        <View
-          key={i}
-          style={{
-            height: 80,
-            borderRadius: 16,
-            backgroundColor: colors.card,
-            borderWidth: StyleSheet.hairlineWidth,
-            borderColor: colors.border,
-            opacity: 1 - i * 0.2,
-          }}
-        />
+    <View style={styles.skeletonGrid}>
+      {[0, 1, 2, 3].map((i) => (
+        <View key={i} style={[styles.skeletonCard, { backgroundColor: colors.card, opacity: 1 - i * 0.15 }]} />
       ))}
     </View>
   );
 }
 
-function ErrorState({ onRetry, colors }: { onRetry: () => void; colors: any }) {
+function ErrorState({ onRetry }: { onRetry: () => void }) {
+  const colors = useColors();
   return (
-    <View style={styles.noResults}>
-      <View style={[styles.noResultsIcon, { backgroundColor: colors.muted }]}>
+    <View style={styles.centeredState}>
+      <View style={[styles.stateIcon, { backgroundColor: colors.muted }]}>
         <Ionicons name="cloud-offline-outline" size={32} color={colors.mutedForeground} />
       </View>
-      <Text style={[styles.noResultsTitle, { color: colors.foreground }]}>
-        {"Couldn't connect"}
-      </Text>
-      <Text style={[styles.noResultsSub, { color: colors.mutedForeground }]}>
-        Check your connection and try again
-      </Text>
+      <Text style={[styles.stateTitle, { color: colors.foreground }]}>Couldn't connect</Text>
+      <Text style={[styles.stateSub, { color: colors.mutedForeground }]}>Check your connection and try again</Text>
       <Pressable
         onPress={onRetry}
-        style={({ pressed }) => [
-          {
-            marginTop: 8,
-            paddingHorizontal: 24,
-            paddingVertical: 12,
-            borderRadius: 20,
-            backgroundColor: colors.card,
-            borderWidth: 1,
-            borderColor: colors.border,
-            opacity: pressed ? 0.7 : 1,
-          },
-        ]}
+        style={({ pressed }) => [styles.retryBtn, { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
       >
-        <Text style={{ color: colors.foreground, fontSize: 14, fontFamily: "Inter_500Medium", fontWeight: "500" as const }}>
-          Try again
-        </Text>
+        <Text style={{ color: colors.foreground, fontSize: 14, fontFamily: "Inter_500Medium", fontWeight: "500" }}>Try again</Text>
       </Pressable>
-    </View>
-  );
-}
-
-function NoResults({ query, colors }: { query: string; colors: any }) {
-  return (
-    <View style={styles.noResults}>
-      <View style={[styles.noResultsIcon, { backgroundColor: colors.muted }]}>
-        <Ionicons name="search-outline" size={32} color={colors.mutedForeground} />
-      </View>
-      <Text style={[styles.noResultsTitle, { color: colors.foreground }]}>
-        No companions found
-      </Text>
-      <Text style={[styles.noResultsSub, { color: colors.mutedForeground }]}>
-        {`Nothing matches "${query}"`}
-      </Text>
     </View>
   );
 }
@@ -318,14 +184,17 @@ function NoResults({ query, colors }: { query: string; colors: any }) {
 function EmptyState() {
   const colors = useColors();
   return (
-    <View style={styles.emptyState}>
-      <View style={[styles.emptyIcon, { backgroundColor: colors.muted }]}>
-        <Ionicons name="chatbubbles-outline" size={40} color={colors.mutedForeground} />
-      </View>
-      <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-        No companions yet
-      </Text>
-      <Text style={[styles.emptyDesc, { color: colors.mutedForeground }]}>
+    <View style={styles.centeredState}>
+      <LinearGradient
+        colors={[colors.accent, colors.primary]}
+        style={styles.emptyGradientCircle}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <Ionicons name="sparkles" size={36} color="#FFFFFF" />
+      </LinearGradient>
+      <Text style={[styles.stateTitle, { color: colors.foreground }]}>No companions yet</Text>
+      <Text style={[styles.stateSub, { color: colors.mutedForeground }]}>
         Create your first AI companion to begin your journey
       </Text>
       <Pressable
@@ -333,7 +202,7 @@ function EmptyState() {
         style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
       >
         <LinearGradient
-          colors={["#818263", "#6B5E45"]}
+          colors={[colors.accent, colors.primary]}
           style={styles.emptyButton}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
@@ -346,134 +215,66 @@ function EmptyState() {
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: {
+
+  headerArea: {},
+  topRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 12,
+    paddingBottom: 4,
+  },
+  titleRow: {
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  greeting: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
   },
   headerTitle: {
     fontSize: 28,
-    fontWeight: "700" as const,
+    fontWeight: "700",
     fontFamily: "Inter_700Bold",
+    letterSpacing: -0.5,
   },
-  headerSub: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    marginTop: 2,
-  },
-  headerActions: {
+  newBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-  },
-  iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  addButton: {
-    borderRadius: 22,
-    overflow: "hidden",
-  },
-  addButtonInner: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 4,
-    paddingHorizontal: 12,
+    gap: 5,
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: 20,
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    paddingVertical: 0,
-  },
-  list: { paddingTop: 16 },
-  noResults: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    paddingHorizontal: 40,
-  },
-  noResultsIcon: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  noResultsTitle: {
-    fontSize: 18,
-    fontWeight: "600" as const,
-    fontFamily: "Inter_600SemiBold",
-    textAlign: "center",
-  },
-  noResultsSub: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    paddingHorizontal: 40,
-  },
-  emptyIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: "600" as const,
-    fontFamily: "Inter_600SemiBold",
-    textAlign: "center",
-  },
-  emptyDesc: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
-    lineHeight: 22,
-  },
-  emptyButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 28,
-    marginTop: 8,
-  },
-  emptyButtonText: {
+  newBtnText: {
     color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600" as const,
+    fontSize: 14,
     fontFamily: "Inter_600SemiBold",
+    fontWeight: "600",
   },
+
+  list: { paddingHorizontal: CARD_H_PAD, paddingTop: 8, gap: CARD_GAP },
+  row: { gap: CARD_GAP },
+
+  skeletonGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: CARD_H_PAD,
+    paddingTop: 8,
+    gap: CARD_GAP,
+  },
+  skeletonCard: { width: CARD_WIDTH, height: 240, borderRadius: 24 },
+
+  centeredState: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 40 },
+  stateIcon: { width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  stateTitle: { fontSize: 20, fontWeight: "600", fontFamily: "Inter_600SemiBold", textAlign: "center" },
+  stateSub: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 22 },
+  retryBtn: { marginTop: 8, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 20, borderWidth: 1 },
+  emptyGradientCircle: { width: 88, height: 88, borderRadius: 44, alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  emptyButton: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 28, paddingVertical: 15, borderRadius: 28, marginTop: 8 },
+  emptyButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
 });
