@@ -1275,20 +1275,7 @@ export default function ChatScreen() {
           </Animated.View>
         )}
 
-        {!isPro && remaining <= 5 && remaining > 0 && (
-          <Pressable
-            onPress={() => router.push("/paywall")}
-            style={styles.limitHint}
-          >
-            <Ionicons name="flash-outline" size={12} color={colors.mutedForeground} />
-            <Text style={[styles.limitHintText, { color: colors.mutedForeground }]}>
-              {remaining} message{remaining !== 1 ? "s" : ""} left today ·{" "}
-              <Text style={{ color: colors.primary }}>Go Pro</Text>
-            </Text>
-          </Pressable>
-        )}
-
-        {!isPro && remaining === 0 ? (
+{!isPro && remaining === 0 ? (
           <Pressable
             onPress={() => router.push("/paywall")}
             style={({ pressed }) => [styles.limitWall, { opacity: pressed ? 0.9 : 1 }]}
@@ -2116,14 +2103,6 @@ const styles = StyleSheet.create({
   moodBtn: { padding: 6 },
   moodEmoji: { fontSize: 26 },
   moodSkip: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 4 },
-  limitHint: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-  },
-  limitHintText: { fontSize: 12, fontFamily: "Inter_400Regular" },
   limitWall: {
     flexDirection: "row",
     alignItems: "center",
