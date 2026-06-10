@@ -1218,10 +1218,10 @@ export default function ChatScreen() {
                       </View>
                       <View style={styles.breathingCardTitleBlock}>
                         <Text style={[styles.breathingCardTitle, { color: colors.foreground }]}>
-                          Breathing 4-4-4
+                          Breathing Exercise
                         </Text>
                         <Text style={[styles.breathingCardSub, { color: colors.mutedForeground }]}>
-                          A quick exercise to help you feel better
+                          Take a moment to breathe and reset
                         </Text>
                       </View>
                     </View>
