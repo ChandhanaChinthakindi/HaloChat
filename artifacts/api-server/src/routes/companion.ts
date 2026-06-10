@@ -215,7 +215,7 @@ Examples of correct replies:
 
   systemPrompt += CONTENT_RESTRICTIONS;
 
-  systemPrompt += `\n\nBREATHING SUGGESTION: Append [BREATHING_REC] on its own line at the very end of your reply when the user shows signs of stress, anxiety, tension, nervousness, panic, overwhelm, or restlessness — situations where slowing down and breathing would genuinely help. Don't suggest it for general sadness, tiredness, or neutral emotions. CRITICAL: Never guide the user through breathing steps in your text ("inhale", "exhale", "breathe in/out", "take a deep breath"). Just respond to what they said naturally, then append [BREATHING_REC]. The card handles the exercise.`;
+  systemPrompt += `\n\nBREATHING SUGGESTION: Append [BREATHING_REC] on its own line at the very end of your reply ONLY for high-arousal negative states where regulating breath genuinely helps: acute anxiety, panic, overwhelm, frustration, anger, racing thoughts, pre-event nerves (exam, interview, presentation), or feeling on edge. Do NOT suggest it for sadness, grief, tiredness, loneliness, boredom, or calm low-energy emotions — those need empathy, not breathing. CRITICAL: Never guide the user through breathing steps in your text ("inhale", "exhale", "breathe in/out", "take a deep breath"). Just respond to what they said naturally, then append [BREATHING_REC]. The card handles the exercise.`;
 
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
   const lastUserLen = lastUserMsg?.content?.length ?? 0;

@@ -1221,7 +1221,7 @@ export default function ChatScreen() {
                           Breathing Exercise
                         </Text>
                         <Text style={[styles.breathingCardSub, { color: colors.mutedForeground }]}>
-                          Take a moment to breathe and reset
+                          A few breaths can help right now
                         </Text>
                       </View>
                     </View>
