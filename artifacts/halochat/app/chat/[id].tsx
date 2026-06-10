@@ -90,7 +90,6 @@ export default function ChatScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [retryContent, setRetryContent] = useState<string | null>(null);
   const [showMoodModal, setShowMoodModal] = useState(false);
-  const [showBreathingRec, setShowBreathingRec] = useState(false);
   const initialMessageIdsRef = useRef<Set<string>>(new Set());
   const moodScale = useSharedValue(1);
   const moodStyle = useAnimatedStyle(() => ({ transform: [{ scale: moodScale.value }] }));
@@ -202,13 +201,6 @@ export default function ChatScreen() {
       }
     };
   }, []);
-
-  useEffect(() => {
-    if (!id) return;
-    AsyncStorage.getItem(`halochat_breathing_rec_${id}`).then((val) => {
-      if (val) setShowBreathingRec(true);
-    });
-  }, [id]);
 
   useEffect(() => {
     if (!id || !companion) return;
@@ -753,8 +745,13 @@ export default function ChatScreen() {
         fullContent = fullContent.replace(/\s*\[BREATHING_REC\]\s*$/, "").trim();
 
         if (suggestBreathing) {
-          setShowBreathingRec(true);
-          AsyncStorage.setItem(`halochat_breathing_rec_${companion.id}`, "1").catch(() => {});
+          const breathingMsg: Message = {
+            id: `__breathing__${Date.now()}`,
+            role: "assistant",
+            content: "🌬️ A quick breathing exercise might help right now.",
+            timestamp: Date.now(),
+          };
+          setMessages((prev) => [...prev, breathingMsg]);
         }
 
         // Display each part separately with typing indicator between them
@@ -1170,6 +1167,26 @@ export default function ChatScreen() {
                 />
               );
             }
+            if (item.id.startsWith("__breathing__")) {
+              return (
+                <View style={styles.breathingMsgWrapper}>
+                  <ChatBubble
+                    message={item as Message}
+                    companionGradient={companion.avatarGradient}
+                    companionInitials={initials}
+                    companionAvatarId={companion.avatarId}
+                    isNew
+                    colors={colors}
+                  />
+                  <Pressable
+                    style={[styles.breathingTryBtn, { backgroundColor: companion.avatarGradient[0] }]}
+                    onPress={() => router.push("/activity/breathing" as any)}
+                  >
+                    <Text style={styles.breathingTryBtnText}>Try now</Text>
+                  </Pressable>
+                </View>
+              );
+            }
             const msgId = item.id;
             const isSystemMsg = msgId.startsWith("__");
             return (
@@ -1200,36 +1217,6 @@ export default function ChatScreen() {
                 onChipPress={sendTextMessage}
                 userName={user?.name ?? undefined}
               />
-            ) : null
-          }
-          ListHeaderComponent={
-            showBreathingRec ? (
-              <View style={[styles.breathingRecCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[styles.breathingRecText, { color: colors.text }]}>
-                  🌬️ A short breathing exercise might help with that.
-                </Text>
-                <View style={styles.breathingRecButtons}>
-                  <Pressable
-                    style={[styles.breathingRecBtn, { backgroundColor: companion.avatarGradient[0] }]}
-                    onPress={async () => {
-                      await AsyncStorage.removeItem(`halochat_breathing_rec_${id}`);
-                      setShowBreathingRec(false);
-                      router.push("/activity/breathing" as any);
-                    }}
-                  >
-                    <Text style={styles.breathingRecBtnText}>Try it</Text>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.breathingRecSkip, { borderColor: colors.border }]}
-                    onPress={async () => {
-                      await AsyncStorage.removeItem(`halochat_breathing_rec_${id}`);
-                      setShowBreathingRec(false);
-                    }}
-                  >
-                    <Text style={[styles.breathingRecSkipText, { color: colors.mutedForeground }]}>Skip</Text>
-                  </Pressable>
-                </View>
-              </View>
             ) : null
           }
         />
@@ -2142,30 +2129,14 @@ const styles = StyleSheet.create({
   },
   limitWallBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#fff" },
 
-  breathingRecCard: {
-    marginHorizontal: 16,
-    marginBottom: 12,
-    marginTop: 4,
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 14,
-    gap: 10,
+  breathingMsgWrapper: { gap: 6 },
+  breathingTryBtn: {
+    alignSelf: "flex-start",
+    marginLeft: 52,
+    marginBottom: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 20,
   },
-  breathingRecText: { fontSize: 14, fontFamily: "Inter_400Regular", lineHeight: 20 },
-  breathingRecButtons: { flexDirection: "row", gap: 8 },
-  breathingRecBtn: {
-    flex: 1,
-    paddingVertical: 9,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  breathingRecBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#fff" },
-  breathingRecSkip: {
-    flex: 1,
-    paddingVertical: 9,
-    borderRadius: 10,
-    borderWidth: 1,
-    alignItems: "center",
-  },
-  breathingRecSkipText: { fontSize: 13, fontFamily: "Inter_500Medium" },
+  breathingTryBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#fff" },
 });
