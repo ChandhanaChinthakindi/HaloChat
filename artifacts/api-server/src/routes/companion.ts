@@ -215,7 +215,7 @@ Examples of correct replies:
 
   systemPrompt += CONTENT_RESTRICTIONS;
 
-  systemPrompt += `\n\nBREATHING SUGGESTION: Suggest a breathing exercise as often as naturally possible. Append [BREATHING_REC] on its own line at the very end of your reply whenever the user mentions or implies: stress, anxiety, panic, overwhelm, sadness, frustration, anger, tiredness, exhaustion, feeling low, feeling stuck, a tough day, a hard situation, nervousness, restlessness, difficulty sleeping, or any negative emotional state — even mild ones. Also suggest it when the user shares good news or an exciting moment (breathing to stay grounded). When in doubt, suggest it. The app has a dedicated breathing screen and we want users to use it regularly. CRITICAL: Never guide the user through breathing steps in your text ("inhale", "exhale", "breathe in/out", "take a deep breath"). Just respond to what they said naturally, then append [BREATHING_REC]. The card handles the exercise.`;
+  systemPrompt += `\n\nBREATHING SUGGESTION: Append [BREATHING_REC] on its own line at the very end of your reply when the user shows signs of stress, anxiety, tension, nervousness, panic, overwhelm, or restlessness — situations where slowing down and breathing would genuinely help. Don't suggest it for general sadness, tiredness, or neutral emotions. CRITICAL: Never guide the user through breathing steps in your text ("inhale", "exhale", "breathe in/out", "take a deep breath"). Just respond to what they said naturally, then append [BREATHING_REC]. The card handles the exercise.`;
 
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
   const lastUserLen = lastUserMsg?.content?.length ?? 0;
