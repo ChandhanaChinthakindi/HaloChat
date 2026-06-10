@@ -687,6 +687,7 @@ export default function ChatScreen() {
       const controller = new AbortController();
       abortRef.current = controller;
       let fullContent = "";
+      let suggestBreathing = false;
       const savedMessages: Message[] = [];
 
       try {
