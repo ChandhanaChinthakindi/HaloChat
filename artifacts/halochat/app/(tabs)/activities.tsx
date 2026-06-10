@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Platform,
   Pressable,
@@ -17,7 +18,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AvatarImage } from "@/components/AvatarImage";
 import { MoodCanvas } from "@/components/MoodCanvas";
-import { useCompanions } from "@/context/CompanionContext";
+import { useAuth } from "@/context/AuthContext";
+import { useCompanions, API_BASE } from "@/context/CompanionContext";
 import { useColors } from "@/hooks/useColors";
 
 // ─── Activity config ──────────────────────────────────────────────────────────
@@ -138,11 +140,13 @@ function MoodCard({
   onCanvasInteractionEnd: () => void;
 }) {
   const { companions } = useCompanions();
+  const { authFetch, user } = useAuth();
   const [moodText, setMoodText]       = useState("");
   const [dotColor, setDotColor]       = useState("");
   const [canShare, setCanShare]       = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sent, setSent]               = useState<SentState | null>(null);
+  const [isSending, setIsSending]     = useState(false);
 
   // Animation for quote card entrance
   const quoteOpacity    = useRef(new Animated.Value(0)).current;
@@ -193,26 +197,47 @@ function MoodCard({
     });
   };
 
-  const canSend = canShare && selectedIds.size > 0;
+  const canSend = canShare && selectedIds.size > 0 && !isSending;
 
   const handleSend = async () => {
     if (!canSend) return;
+    setIsSending(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
     const today = todayKey();
     const selected = companions.filter((c) => selectedIds.has(c.id));
-    const message = pickMessage(moodText, today);
-    const sentState: SentState = { moodText, dotColor, message };
-    await Promise.all([
-      AsyncStorage.setItem(CARD_STATE_KEY, JSON.stringify({ ...sentState, date: today })),
-      ...selected.map((c) =>
-        AsyncStorage.setItem(
-          `halochat_mood_share_${c.id}`,
-          JSON.stringify({ moodText, dotColor, sharedAt: today })
-        )
-      ),
-    ]);
+    const currentMoodText = moodText;
+    const currentUserName = user?.name;
+
+    // Call the API first — messages land in the DB before the sent card shows
+    const results = await Promise.allSettled(
+      selected.map(async (c) => {
+        const res = await authFetch(`${API_BASE}/companions/${c.id}/mood-share`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ moodText: currentMoodText, userName: currentUserName }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          Alert.alert(
+            `Mood share failed (${c.name})`,
+            `HTTP ${res.status}\n${JSON.stringify(body, null, 2)}\n\nURL: ${API_BASE}/companions/${c.id}/mood-share`
+          );
+        }
+        return { status: res.status, body };
+      })
+    );
+
+    // Log to Metro console as well
+    console.log("[mood-share] results:", JSON.stringify(results));
+
+    // API done — now persist and show the sent card
+    const message = pickMessage(currentMoodText, today);
+    const sentState: SentState = { moodText: currentMoodText, dotColor, message };
+    await AsyncStorage.setItem(CARD_STATE_KEY, JSON.stringify({ ...sentState, date: today }));
     setSent(sentState);
     animateQuoteIn();
+    setIsSending(false);
   };
 
   const handleReset = async () => {
@@ -296,12 +321,16 @@ function MoodCard({
         <Text style={[styles.moodShareTitle, { color: colors.foreground }]}>Share with</Text>
         <Pressable
           onPress={handleSend}
+          disabled={!canSend}
           style={({ pressed }) => [
             styles.moodSendBtn,
             { backgroundColor: canSend ? "#D99030" : colors.muted, opacity: pressed ? 0.82 : 1 },
           ]}
         >
-          <Ionicons name="arrow-up" size={16} color={canSend ? "#FFFFFF" : colors.mutedForeground} />
+          {isSending
+            ? <Ionicons name="ellipsis-horizontal" size={16} color="#FFFFFF" />
+            : <Ionicons name="arrow-up" size={16} color={canSend ? "#FFFFFF" : colors.mutedForeground} />
+          }
         </Pressable>
       </View>
 

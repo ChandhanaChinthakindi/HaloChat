@@ -36,6 +36,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Image } from "expo-image";
 import { ChatBubble } from "@/components/ChatBubble";
+import { useSubscription } from "@/context/SubscriptionContext";
 import { AvatarImage } from "@/components/AvatarImage";
 import { getAvatarById } from "@/constants/avatars";
 import {
@@ -60,6 +61,7 @@ export default function ChatScreen() {
   const { companions, getMessages, addMessage, deleteMessages, updateRelationshipLevel, addMemoryNote, clearMessages, deleteCompanion } =
     useCompanions();
   const { authFetch, accessToken, user } = useAuth();
+  const { canSendMessage, incrementMessageCount, isPro, remaining } = useSubscription();
 
   const companion = companions.find((c) => c.id === id);
 
@@ -649,6 +651,12 @@ export default function ChatScreen() {
   const sendTextMessage = useCallback(
     async (text: string) => {
       if (!text.trim() || isStreaming || !companion) return;
+
+      if (!canSendMessage) {
+        router.push("/paywall");
+        return;
+      }
+
       const userContent = text.trim();
       setInput("");
       setRetryContent(null);
@@ -666,6 +674,7 @@ export default function ChatScreen() {
       const userServerId = await addMessage(companion.id, userMsg);
       if (userServerId) serverIdMapRef.current.set(userMsg.id, userServerId);
       await hapticsImpact();
+      await incrementMessageCount();
 
       const apiMessages = [
         ...currentMessages.slice(-20).map((m) => ({ role: m.role, content: m.content })),
@@ -1172,6 +1181,7 @@ export default function ChatScreen() {
                 colors={colors}
                 chips={STARTER_CHIPS[companion.type] ?? STARTER_CHIPS.supportive}
                 onChipPress={sendTextMessage}
+                userName={user?.name ?? undefined}
               />
             ) : null
           }
@@ -1198,19 +1208,6 @@ export default function ChatScreen() {
 
       {/* Input bar */}
       <Animated.View style={[styles.inputBar, inputBarPaddingStyle]}>
-        {isIOS ? (
-          <BlurView
-            intensity={50}
-            tint={isDark ? "dark" : "light"}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-        ) : (
-          <View
-            style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? "rgba(42,26,22,0.72)" : "rgba(255,253,248,0.72)" }]}
-            pointerEvents="none"
-          />
-        )}
         {isRecording && (
           <Animated.View
             style={[
@@ -1226,6 +1223,45 @@ export default function ChatScreen() {
           </Animated.View>
         )}
 
+        {!isPro && remaining <= 5 && remaining > 0 && (
+          <Pressable
+            onPress={() => router.push("/paywall")}
+            style={styles.limitHint}
+          >
+            <Ionicons name="flash-outline" size={12} color={colors.mutedForeground} />
+            <Text style={[styles.limitHintText, { color: colors.mutedForeground }]}>
+              {remaining} message{remaining !== 1 ? "s" : ""} left today ·{" "}
+              <Text style={{ color: colors.primary }}>Go Pro</Text>
+            </Text>
+          </Pressable>
+        )}
+
+        {!isPro && remaining === 0 ? (
+          <Pressable
+            onPress={() => router.push("/paywall")}
+            style={({ pressed }) => [styles.limitWall, { opacity: pressed ? 0.9 : 1 }]}
+          >
+            <View style={[styles.limitWallIconWrap, { backgroundColor: `${colors.primary}18` }]}>
+              <Ionicons name="lock-closed" size={20} color={colors.primary} />
+            </View>
+            <View style={styles.limitWallText}>
+              <Text style={[styles.limitWallTitle, { color: colors.foreground }]}>
+                You've reached today's limit
+              </Text>
+              <Text style={[styles.limitWallSub, { color: colors.mutedForeground }]}>
+                Upgrade to Pro for unlimited messages
+              </Text>
+            </View>
+            <LinearGradient
+              colors={["#C084FC", "#F472B6"]}
+              style={styles.limitWallBtn}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              <Text style={styles.limitWallBtnText}>Upgrade</Text>
+            </LinearGradient>
+          </Pressable>
+        ) : (
         <View
           style={[
             styles.inputRow,
@@ -1298,6 +1334,7 @@ export default function ChatScreen() {
             </LinearGradient>
           </Pressable>
         </View>
+        )}
       </Animated.View>
 
       {/* Multi-select delete bar */}
@@ -1346,18 +1383,29 @@ export default function ChatScreen() {
   );
 }
 
+const GREETING_BY_TYPE: Record<CompanionType, (name: string) => string> = {
+  romantic:   (n) => n ? `Hey ${n}… I've been looking forward to this 💕` : "Hey you… I've been looking forward to this 💕",
+  supportive: (n) => n ? `Hi ${n}, I'm here — no rush, just talk to me` : "Hi, I'm here — no rush, just talk to me",
+  uplift:     (n) => n ? `Hey ${n}! You showed up — that already matters ✨` : "Hey! You showed up — that already matters ✨",
+  bestfriend: (n) => n ? `OKAY ${n}, spill everything 🧡` : "OKAY, spill everything 🧡",
+};
+
 function GreetingCard({
   companion,
   colors,
   chips,
   onChipPress,
+  userName,
 }: {
   companion: any;
   colors: any;
   chips: string[];
   onChipPress: (text: string) => void;
+  userName?: string;
 }) {
   const typeInfo = COMPANION_TYPES[companion.type as CompanionType] ?? COMPANION_TYPES["supportive"];
+  const greetingFn = GREETING_BY_TYPE[companion.type as CompanionType] ?? GREETING_BY_TYPE.supportive;
+  const greeting = greetingFn(userName ?? "");
 
   return (
     <View style={styles.greeting}>
@@ -1392,7 +1440,7 @@ function GreetingCard({
         <Text style={[styles.greetingTypeLabel, { color: colors.foreground }]}>{typeInfo.label}</Text>
       </View>
       <Text style={[styles.greetingDesc, { color: colors.foreground }]}>
-        {typeInfo.description}
+        {greeting}
       </Text>
 
       {chips.length > 0 && (
@@ -2016,4 +2064,34 @@ const styles = StyleSheet.create({
   moodBtn: { padding: 6 },
   moodEmoji: { fontSize: 26 },
   moodSkip: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 4 },
+  limitHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+  },
+  limitHintText: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  limitWall: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  limitWallIconWrap: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: "center", justifyContent: "center",
+    flexShrink: 0,
+  },
+  limitWallText: { flex: 1, gap: 2 },
+  limitWallTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", fontWeight: "600" },
+  limitWallSub: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  limitWallBtn: {
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    flexShrink: 0,
+  },
+  limitWallBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#fff" },
 });

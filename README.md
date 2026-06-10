@@ -6,6 +6,11 @@ HaloChat is an iOS app that lets you build meaningful relationships with persona
 
 ## Recent Changes (v2.0 — June 2026)
 
+### Mood Canvas Companion Reply
+
+- **Mood share → companion reply** — When the user shares their mood from the Mood Canvas to a companion, the server generates a personality-aware response using the last 10 messages as context, saves both the user mood message and the companion reply to the chat DB, then sends a push notification 2.5 s later. The sent confirmation card appears on the Activities screen only after the reply has been saved — so the message is already waiting in the chat by the time the user navigates there.
+- **New endpoint** — `POST /companions/:id/mood-share`: validates mood text, runs a parallel DB load of companion + user + recent messages + memory notes, calls GPT-4o-mini with a personality-specific system prompt, and saves both messages in a single round trip.
+
 ### Breathing Pattern
 
 - **4-4-4 pattern** — Breathing exercise changed to equal-ratio box breathing (inhale 4s, hold 4s, exhale 4s); subtitle, in-session pattern chip, and actual timer all consistent
@@ -577,6 +582,7 @@ All authenticated endpoints require `Authorization: Bearer <access_token>`.
 | `PATCH` | `/companions/:id` | Yes | Update name, customPersonality, customVoice, relationshipLevel, avatarId, avatarColor, etc. |
 | `POST` | `/companions/:id/mood` | Yes | Log or update today's mood. Body: `{ date, mood }` (mood 1–5). Upserts on same day. |
 | `GET` | `/companions/:id/mood` | Yes | Fetch last 7 days of mood logs. Returns `{ logs: [{ date, mood }] }`. |
+| `POST` | `/companions/:id/mood-share` | Yes | Share a mood canvas result with a companion. Body: `{ moodText: string, userName?: string }`. Generates a personality-aware reply using the last 10 messages as context, saves both messages to the chat, and sends a push notification 2.5 s later. Returns `{ success: true }`. |
 | `DELETE` | `/companions/:id` | Yes | Delete companion and all its data (messages, memory, mood logs). |
 
 ### Messages
@@ -904,7 +910,7 @@ The Activities tab (`/(tabs)/activities`) has 3 streak-tracked daily practice ca
 | `breathing` | Yes | Breathing Exercise | ~3 min | Guided 4-4-4 breathing (inhale 4s, hold 4s, exhale 4s); animated orb, 3-second countdown, voice guidance with mute toggle |
 | `journal` | Yes | Journal Prompt | ~5 min | Companion generates a reflective prompt; user writes a free-text entry |
 | `gratitude` | Yes | Gratitude Practice | ~3 min | User lists 3 gratitude items; companion responds with warmth |
-| `checkin` | No | Mood Canvas | ~2 min | Bilinear 2D colour-gradient drag canvas; user positions a ball across 9 named emotional states (e.g. "Serene · Calm · Peaceful"); companion responds to the selected mood via `POST /companion/chat-sync` |
+| `checkin` | No | Mood Canvas | ~2 min | Bilinear 2D colour-gradient drag canvas; user positions a ball across 9 named emotional states (e.g. "Serene · Calm · Peaceful"); shareable to selected companions via `POST /companions/:id/mood-share` — companion generates a personality-aware reply using recent chat context; push notification follows 2.5 s later |
 
 ### Completion Tracking
 
