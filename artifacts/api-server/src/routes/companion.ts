@@ -215,7 +215,7 @@ Examples of correct replies:
 
   systemPrompt += CONTENT_RESTRICTIONS;
 
-  systemPrompt += `\n\nBREATHING SUGGESTION: If the user seems genuinely anxious, overwhelmed, panicky, or in a distressing moment where pausing to breathe would actually help right now — end your reply with the token [BREATHING_REC] on its own line at the very end. Nothing after it. This token is invisible to the user and triggers a gentle breathing exercise offer in the UI. Use it sparingly and only when it would feel natural and caring, not as a generic fix for any negative emotion.`;
+  systemPrompt += `\n\nBREATHING SUGGESTION: If the user seems genuinely anxious, overwhelmed, panicky, or in a distressing moment where pausing to breathe would actually help right now — end your reply with the token [BREATHING_REC] on its own line at the very end. Nothing after it. IMPORTANT: If you mention breathing, "take a deep breath", or any breathing technique in your reply, you MUST also append [BREATHING_REC]. This token is invisible to the user and triggers a breathing exercise card in the UI. Use it only when the moment genuinely calls for it.`;
 
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
   const lastUserLen = lastUserMsg?.content?.length ?? 0;
@@ -274,7 +274,8 @@ Examples of correct replies:
       }
     }
 
-    if (fullReply.includes("[BREATHING_REC]")) {
+    const breathingKeywords = /\b(take a deep breath|breathing exercise|try.{0,10}breath|breath.{0,10}exercise|4[-–]4[-–]4|box breath)\b/i;
+    if (fullReply.includes("[BREATHING_REC]") || breathingKeywords.test(fullReply)) {
       res.write(`data: ${JSON.stringify({ suggestBreathing: true })}\n\n`);
     }
 
