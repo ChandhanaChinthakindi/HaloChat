@@ -744,8 +744,17 @@ export default function ChatScreen() {
             try {
               const parsed = JSON.parse(data);
               if (parsed.content) fullContent += parsed.content;
+              if (parsed.suggestBreathing) suggestBreathing = true;
             } catch { /* ignore */ }
           }
+        }
+
+        // Strip the hidden marker from content before displaying
+        fullContent = fullContent.replace(/\s*\[BREATHING_REC\]\s*$/, "").trim();
+
+        if (suggestBreathing) {
+          setShowBreathingRec(true);
+          AsyncStorage.setItem(`halochat_breathing_rec_${companion.id}`, "1").catch(() => {});
         }
 
         // Display each part separately with typing indicator between them

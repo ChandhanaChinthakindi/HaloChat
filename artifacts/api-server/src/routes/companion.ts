@@ -215,6 +215,8 @@ Examples of correct replies:
 
   systemPrompt += CONTENT_RESTRICTIONS;
 
+  systemPrompt += `\n\nBREATHING SUGGESTION: If the user seems genuinely anxious, overwhelmed, panicky, or in a distressing moment where pausing to breathe would actually help right now — end your reply with the token [BREATHING_REC] on its own line at the very end. Nothing after it. This token is invisible to the user and triggers a gentle breathing exercise offer in the UI. Use it sparingly and only when it would feel natural and caring, not as a generic fix for any negative emotion.`;
+
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
   const lastUserLen = lastUserMsg?.content?.length ?? 0;
   let lengthInstruction: string;
@@ -263,11 +265,17 @@ Examples of correct replies:
       stream: true,
     });
 
+    let fullReply = "";
     for await (const chunk of stream) {
       const content = chunk.choices[0]?.delta?.content;
       if (content) {
+        fullReply += content;
         res.write(`data: ${JSON.stringify({ content })}\n\n`);
       }
+    }
+
+    if (fullReply.includes("[BREATHING_REC]")) {
+      res.write(`data: ${JSON.stringify({ suggestBreathing: true })}\n\n`);
     }
 
     res.write("data: [DONE]\n\n");
@@ -282,6 +290,89 @@ Examples of correct replies:
     res.write(`data: ${JSON.stringify({ content: errMsg })}\n\n`);
     res.write("data: [DONE]\n\n");
     res.end();
+  }
+});
+
+// Kept for potential future use — mood share is now handled by POST /companions/:id/mood-share in companions-db.ts
+router.post("/companion/mood-message", requireAuth, chatLimiter, async (req, res) => {
+  const {
+    companionType, companionName, companionGender, memoryNotes, traits,
+    customPersonality, relationshipLevel, userGender, userAge, responseStyle,
+    moodText, userName,
+  } = req.body as {
+    companionType: string;
+    companionName: string;
+    companionGender?: string;
+    memoryNotes?: string[];
+    traits?: string[];
+    customPersonality?: string;
+    relationshipLevel?: number;
+    userGender?: string;
+    userAge?: number;
+    responseStyle?: string;
+    moodText: string;
+    userName?: string;
+  };
+
+  if (!moodText || !companionType || !companionName) {
+    res.status(400).json({ error: "companionType, companionName and moodText are required" });
+    return;
+  }
+
+  if (!process.env["OPENAI_API_KEY"]) {
+    res.status(503).json({ companionReply: "I'm here — talk to me whenever you're ready." });
+    return;
+  }
+
+  let systemPrompt = COMPANION_SYSTEM_PROMPTS[companionType] || COMPANION_SYSTEM_PROMPTS["supportive"];
+  systemPrompt = `Your name is ${companionName}. ${systemPrompt}`;
+
+  if (companionGender === "female") systemPrompt += `\n\nYour pronouns are she/her. You present as female.`;
+  else if (companionGender === "male") systemPrompt += `\n\nYour pronouns are he/him. You present as male.`;
+  else if (companionGender === "nonbinary") systemPrompt += `\n\nYour pronouns are they/them. You present as non-binary.`;
+
+  if (userGender === "female") systemPrompt += `\n\nUSER GENDER: The user is female. Use she/her pronouns when referring to them.`;
+  else if (userGender === "male") systemPrompt += `\n\nUSER GENDER: The user is male. Use he/him pronouns when referring to them.`;
+  else if (userGender === "nonbinary") systemPrompt += `\n\nUSER GENDER: The user is non-binary. Use they/them pronouns.`;
+
+  if (traits && traits.length > 0) {
+    const safeTraits = traits.slice(0, 3).map((t: string) => t.trim()).filter(Boolean);
+    if (safeTraits.length > 0) systemPrompt += `\n\nPERSONALITY TRAITS: ${safeTraits.join(", ")}. Let these shape your tone.`;
+  }
+
+  if (customPersonality) {
+    const safe = customPersonality.trim().slice(0, 500).replace(/"""|\[END\]/gi, "");
+    systemPrompt += `\n\nCUSTOM PERSONALITY NOTES:\n"""\n${safe}\n"""\n[END CUSTOM PERSONALITY NOTES]`;
+  }
+
+  if (memoryNotes?.length) systemPrompt += buildMemoryBlock(memoryNotes);
+  systemPrompt += getBondTone(typeof relationshipLevel === "number" ? relationshipLevel : 0);
+
+  if (responseStyle === "brief") systemPrompt += `\n\nRESPONSE LENGTH: Keep it short — 1-2 sentences.`;
+  else if (responseStyle === "deep") systemPrompt += `\n\nRESPONSE LENGTH: You can go a little deeper here if the mood calls for it.`;
+
+  if (typeof userAge === "number" && userAge <= 19) {
+    systemPrompt += `\n\nUSER AGE: The user is ${userAge}. Keep everything strictly age-appropriate.`;
+  }
+
+  systemPrompt += CONTENT_RESTRICTIONS;
+
+  systemPrompt += `\n\nMOOD SHARE CONTEXT: The user just used a mood canvas in the app and deliberately chose to share their current emotional state with you. This is an intimate, intentional act — they're letting you in. Respond authentically in your own personality voice. Don't label the feeling back at them ("I see you're feeling X"). Just react the way a real person would — if it's something heavy, check in warmly; if it's something good, share in it. Keep it 1-3 sentences. Don't ask multiple questions. Feel it with them.`;
+
+  const userMsg = userName ? `${userName} shared their mood: ${moodText}` : `Just sharing my mood: ${moodText}`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      max_tokens: 200,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMsg },
+      ],
+    });
+    res.json({ companionReply: completion.choices[0]?.message?.content?.trim() || "" });
+  } catch {
+    res.status(500).json({ companionReply: "I couldn't respond right now." });
   }
 });
 
