@@ -1181,26 +1181,67 @@ export default function ChatScreen() {
               );
             }
             if (item.id.startsWith("__breathing__")) {
+              const avatarInfo = getAvatarById(companion.avatarId);
               return (
-                <View style={styles.breathingMsgWrapper}>
-                  <ChatBubble
-                    message={item as Message}
-                    companionGradient={companion.avatarGradient}
-                    companionInitials={initials}
-                    companionAvatarId={companion.avatarId}
-                    isNew
-                  />
-                  <View style={styles.breathingExerciseRow}>
-                    <View style={styles.breathingExerciseInfo}>
-                      <Text style={[styles.breathingExerciseName, { color: colors.mutedForeground }]}>
-                        🌬️ Breathing 4-4-4
-                      </Text>
-                    </View>
-                    <Pressable
-                      style={[styles.breathingTryBtn, { backgroundColor: companion.avatarGradient[0] }]}
-                      onPress={() => router.push("/activity/breathing" as any)}
+                <View style={styles.breathingCardRow}>
+                  {/* Companion avatar */}
+                  {avatarInfo?.source ? (
+                    <Image
+                      source={avatarInfo.source}
+                      style={styles.breathingCardAvatar}
+                      contentFit="cover"
+                      contentPosition={{ top: 0 }}
+                    />
+                  ) : (
+                    <LinearGradient
+                      colors={companion.avatarGradient as [string, string]}
+                      style={styles.breathingCardAvatarGrad}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
                     >
-                      <Text style={styles.breathingTryBtnText}>Try Now</Text>
+                      <Text style={styles.breathingCardAvatarText}>{initials}</Text>
+                    </LinearGradient>
+                  )}
+
+                  {/* Card */}
+                  <View style={[
+                    styles.breathingCard,
+                    {
+                      backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      borderColor: `${companion.avatarGradient[0]}40`,
+                    },
+                  ]}>
+                    {/* Icon + title row */}
+                    <View style={styles.breathingCardHeader}>
+                      <View style={[styles.breathingCardIconWrap, { backgroundColor: `${companion.avatarGradient[0]}22` }]}>
+                        <Text style={styles.breathingCardIconText}>🌬️</Text>
+                      </View>
+                      <View style={styles.breathingCardTitleBlock}>
+                        <Text style={[styles.breathingCardTitle, { color: colors.foreground }]}>
+                          Breathing 4-4-4
+                        </Text>
+                        <Text style={[styles.breathingCardSub, { color: colors.mutedForeground }]}>
+                          A quick exercise to help you feel better
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Divider */}
+                    <View style={[styles.breathingCardDivider, { backgroundColor: `${companion.avatarGradient[0]}25` }]} />
+
+                    {/* Try Now button */}
+                    <Pressable
+                      onPress={() => router.push("/activity/breathing" as any)}
+                      style={({ pressed }) => [{ opacity: pressed ? 0.82 : 1 }]}
+                    >
+                      <LinearGradient
+                        colors={companion.avatarGradient as [string, string]}
+                        style={styles.breathingCardBtn}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                      >
+                        <Text style={styles.breathingCardBtnText}>Try Now</Text>
+                      </LinearGradient>
                     </Pressable>
                   </View>
                 </View>
@@ -2127,21 +2168,88 @@ const styles = StyleSheet.create({
   },
   limitWallBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#fff" },
 
-  breathingMsgWrapper: { gap: 4 },
-  breathingExerciseRow: {
+  breathingCardRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    gap: 8,
+  },
+  breathingCardAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    overflow: "hidden",
+    flexShrink: 0,
+    marginTop: 2,
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.55)",
+  },
+  breathingCardAvatarGrad: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    marginTop: 2,
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.55)",
+  },
+  breathingCardAvatarText: {
+    fontSize: 11,
+    fontWeight: "700" as const,
+    color: "#fff",
+    fontFamily: "Inter_700Bold",
+  },
+  breathingCard: {
+    flex: 1,
+    borderRadius: 18,
+    borderTopLeftRadius: 4,
+    borderWidth: 1,
+    overflow: "hidden",
+    maxWidth: "82%",
+  },
+  breathingCardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginLeft: 52,
-    marginRight: 16,
-    marginBottom: 6,
     gap: 10,
+    padding: 14,
   },
-  breathingExerciseInfo: { flex: 1 },
-  breathingExerciseName: { fontSize: 13, fontFamily: "Inter_500Medium" },
-  breathingTryBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 7,
+  breathingCardIconWrap: {
+    width: 40,
+    height: 40,
     borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
-  breathingTryBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#fff" },
+  breathingCardIconText: { fontSize: 20 },
+  breathingCardTitleBlock: { flex: 1, gap: 2 },
+  breathingCardTitle: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
+  },
+  breathingCardSub: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+  },
+  breathingCardDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: 14,
+  },
+  breathingCardBtn: {
+    margin: 10,
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  breathingCardBtnText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
+    color: "#fff",
+  },
 });
