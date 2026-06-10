@@ -1176,7 +1176,6 @@ export default function ChatScreen() {
                     companionInitials={initials}
                     companionAvatarId={companion.avatarId}
                     isNew
-                    colors={colors}
                   />
                   <Pressable
                     style={[styles.breathingTryBtn, { backgroundColor: companion.avatarGradient[0] }]}
