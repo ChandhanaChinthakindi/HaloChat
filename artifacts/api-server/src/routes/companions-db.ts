@@ -452,7 +452,8 @@ router.post("/companions/:id/mood-share", requireAuth, async (req, res) => {
     }
 
     if (!companionReply) {
-      res.json({ success: true });
+      const breathingRecommendedFallback = /anxious|tense|stress|overwhelm|restless|uneasy|panic|worried|frantic|nervous/i.test(moodText);
+      res.json({ success: true, breathingRecommended: breathingRecommendedFallback });
       return;
     }
 
@@ -468,8 +469,10 @@ router.post("/companions/:id/mood-share", requireAuth, async (req, res) => {
       .set({ lastMessage: companionReply, lastMessageAt: new Date() })
       .where(eq(companionsTable.id, id));
 
+    const breathingRecommended = /anxious|tense|stress|overwhelm|restless|uneasy|panic|worried|frantic|nervous/i.test(moodText);
+
     // Respond to client immediately, then push after a delay so it feels natural
-    res.json({ success: true });
+    res.json({ success: true, breathingRecommended });
 
     const pushToken = userRow?.pushToken;
     if (pushToken) {

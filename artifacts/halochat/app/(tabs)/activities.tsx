@@ -209,18 +209,24 @@ function MoodCard({
     const currentUserName = user?.name;
 
     // Call the API first — messages land in the DB before the sent card shows
-    await Promise.allSettled(
-      selected.map((c) =>
-        authFetch(`${API_BASE}/companions/${c.id}/mood-share`, {
+    const shareResults = await Promise.allSettled(
+      selected.map(async (c) => {
+        const res = await authFetch(`${API_BASE}/companions/${c.id}/mood-share`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ moodText: currentMoodText, userName: currentUserName }),
-        })
-      )
+        });
+        const body = await res.json().catch(() => ({}));
+        if (body.breathingRecommended) {
+          await AsyncStorage.setItem(`halochat_breathing_rec_${c.id}`, "1");
+        }
+        return body;
+      })
     );
 
     // Bump each companion to the top of the home screen list
     selected.forEach((c) => bumpCompanionActivity(c.id));
+    void shareResults; // consumed above
 
     // API done — now persist and show the sent card
     const message = pickMessage(currentMoodText, today);
