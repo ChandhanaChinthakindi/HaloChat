@@ -749,22 +749,6 @@ export default function ChatScreen() {
         // Strip the hidden marker from content before displaying
         fullContent = fullContent.replace(/\s*\[BREATHING_REC\]\s*$/, "").trim();
 
-        if (suggestBreathing) {
-          const breathingLines: Record<string, string> = {
-            romantic: "hey babe, try this breathing exercise — might help you feel a little better 💕",
-            supportive: "hey, try this breathing exercise — it really might help right now 🌬️",
-            bestfriend: "yo try this breathing exercise, it genuinely helps i promise 😊",
-            uplift: "try this breathing exercise, it'll help you reset and feel good again! 🌬️",
-          };
-          const breathingMsg: Message = {
-            id: `__breathing__${Date.now()}`,
-            role: "assistant",
-            content: breathingLines[companion.type] ?? breathingLines.supportive!,
-            timestamp: Date.now(),
-          };
-          setMessages((prev) => [...prev, breathingMsg]);
-        }
-
         // Display each part separately with typing indicator between them
         const parts = splitIntoMessages(fullContent);
         for (let i = 0; i < parts.length; i++) {
@@ -788,6 +772,23 @@ export default function ChatScreen() {
           if (i < parts.length - 1) {
             await new Promise<void>((r) => setTimeout(r, 250 + Math.random() * 250));
           }
+        }
+
+        // Add breathing suggestion AFTER the response so it renders below it (newest item)
+        if (suggestBreathing && !controller.signal.aborted) {
+          const breathingLines: Record<string, string> = {
+            romantic: "hey babe, try this breathing exercise — might help you feel a little better 💕",
+            supportive: "hey, try this breathing exercise — it really might help right now 🌬️",
+            bestfriend: "yo try this breathing exercise, it genuinely helps i promise 😊",
+            uplift: "try this breathing exercise, it'll help you reset and feel good again! 🌬️",
+          };
+          const breathingMsg: Message = {
+            id: `__breathing__${Date.now()}`,
+            role: "assistant",
+            content: breathingLines[companion.type] ?? breathingLines.supportive!,
+            timestamp: Date.now(),
+          };
+          setMessages((prev) => [...prev, breathingMsg]);
         }
       } catch (err: any) {
         if (err?.name === "AbortError") return;
