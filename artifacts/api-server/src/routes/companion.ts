@@ -215,7 +215,7 @@ Examples of correct replies:
 
   systemPrompt += CONTENT_RESTRICTIONS;
 
-  systemPrompt += `\n\nBREATHING SUGGESTION: If the user seems genuinely anxious, overwhelmed, panicky, or in a distressing moment where pausing to breathe would actually help right now — end your reply with the token [BREATHING_REC] on its own line at the very end. Nothing after it. IMPORTANT: If you mention breathing, "take a deep breath", or any breathing technique in your reply, you MUST also append [BREATHING_REC]. This token is invisible to the user and triggers a breathing exercise card in the UI. Use it only when the moment genuinely calls for it.`;
+  systemPrompt += `\n\nBREATHING SUGGESTION: If the user seems genuinely anxious, overwhelmed, panicky, or in a distressing moment — end your reply with the token [BREATHING_REC] on its own line at the very end. Nothing after it. The app will show a breathing exercise card automatically. CRITICAL: Never guide the user through breathing in your text. Do NOT say things like "take a deep breath", "inhale", "exhale", "breathe in/out", "let's breathe", or walk through any breathing steps. Just respond to the emotion naturally, then append [BREATHING_REC]. The card handles the exercise — your job is only to be present with them.`;
 
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
   const lastUserLen = lastUserMsg?.content?.length ?? 0;
