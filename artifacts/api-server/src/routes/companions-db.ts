@@ -456,11 +456,9 @@ router.post("/companions/:id/mood-share", requireAuth, async (req, res) => {
       return;
     }
 
-    // Save the mood share + companion reply to chat history
-    const dbUserMsg = `Just sharing my mood: ${moodText}`;
+    // Save only the companion reply — no user-visible mood message in chat
     logger.info({ companionId: id, reply: companionReply.slice(0, 60) }, "mood-share saving messages");
     await db.insert(messagesTable).values([
-      { companionId: id, role: "user", content: dbUserMsg },
       { companionId: id, role: "assistant", content: companionReply },
     ]);
     logger.info({ companionId: id }, "mood-share messages saved");

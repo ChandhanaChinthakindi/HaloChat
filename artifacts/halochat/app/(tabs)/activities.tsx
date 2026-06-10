@@ -4,7 +4,6 @@ import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
   Platform,
   Pressable,
@@ -210,26 +209,15 @@ function MoodCard({
     const currentUserName = user?.name;
 
     // Call the API first — messages land in the DB before the sent card shows
-    const results = await Promise.allSettled(
-      selected.map(async (c) => {
-        const res = await authFetch(`${API_BASE}/companions/${c.id}/mood-share`, {
+    await Promise.allSettled(
+      selected.map((c) =>
+        authFetch(`${API_BASE}/companions/${c.id}/mood-share`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ moodText: currentMoodText, userName: currentUserName }),
-        });
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          Alert.alert(
-            `Mood share failed (${c.name})`,
-            `HTTP ${res.status}\n${JSON.stringify(body, null, 2)}\n\nURL: ${API_BASE}/companions/${c.id}/mood-share`
-          );
-        }
-        return { status: res.status, body };
-      })
+        })
+      )
     );
-
-    // Log to Metro console as well
-    console.log("[mood-share] results:", JSON.stringify(results));
 
     // API done — now persist and show the sent card
     const message = pickMessage(currentMoodText, today);

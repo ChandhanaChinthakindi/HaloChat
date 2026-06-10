@@ -224,7 +224,7 @@ describe("POST /api/companions/:id/mood-share — happy path", () => {
     expect(res.body.success).toBe(true);
   });
 
-  it("saves a user message and an assistant reply to messagesTable", async () => {
+  it("saves only the assistant reply to messagesTable (no user message row)", async () => {
     queueSelects();
     mockAIReply("That's nice to hear! Tell me more about your day.");
 
@@ -233,16 +233,12 @@ describe("POST /api/companions/:id/mood-share — happy path", () => {
       .set(AUTH)
       .send({ moodText: "Content · Happy · Good", userName: "Princy" });
 
-    // The insert should have been called with two rows
-    expect(insertedRows.length).toBeGreaterThan(0);
     const savedRows = insertedRows.flat();
     const userMsg = savedRows.find((r: any) => r.role === "user");
     const assistantMsg = savedRows.find((r: any) => r.role === "assistant");
-    expect(userMsg).toBeDefined();
-    expect(userMsg?.content).toContain("Content · Happy · Good");
+    expect(userMsg).toBeUndefined(); // mood share never shows as a user bubble
     expect(assistantMsg).toBeDefined();
     expect(assistantMsg?.content).toBe("That's nice to hear! Tell me more about your day.");
-    expect(userMsg?.companionId).toBe("comp-1");
     expect(assistantMsg?.companionId).toBe("comp-1");
   });
 
