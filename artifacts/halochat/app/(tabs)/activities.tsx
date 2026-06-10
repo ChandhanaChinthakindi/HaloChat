@@ -138,7 +138,7 @@ function MoodCard({
   onCanvasInteractionStart: () => void;
   onCanvasInteractionEnd: () => void;
 }) {
-  const { companions } = useCompanions();
+  const { companions, bumpCompanionActivity } = useCompanions();
   const { authFetch, user } = useAuth();
   const [moodText, setMoodText]       = useState("");
   const [dotColor, setDotColor]       = useState("");
@@ -218,6 +218,9 @@ function MoodCard({
         })
       )
     );
+
+    // Bump each companion to the top of the home screen list
+    selected.forEach((c) => bumpCompanionActivity(c.id));
 
     // API done — now persist and show the sent card
     const message = pickMessage(currentMoodText, today);

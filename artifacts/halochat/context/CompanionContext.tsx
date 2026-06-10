@@ -244,6 +244,7 @@ interface CompanionContextType {
   removeMemoryNote: (companionId: string, index: number) => Promise<void>;
   setCompanionResponseStyle: (id: string, style: ResponseStyle) => Promise<void>;
   clearMessages: (companionId: string) => Promise<void>;
+  bumpCompanionActivity: (companionId: string, lastMessage?: string) => void;
   isLoaded: boolean;
   loadError: boolean;
   retryLoad: () => void;
@@ -605,6 +606,17 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const bumpCompanionActivity = useCallback((companionId: string, lastMessage?: string) => {
+    const now = Date.now();
+    setCompanions((prev) =>
+      prev.map((c) =>
+        c.id === companionId
+          ? { ...c, lastMessageTime: now, ...(lastMessage ? { lastMessage } : {}) }
+          : c
+      )
+    );
+  }, []);
+
   const clearMessages = useCallback(async (companionId: string) => {
     await authFetchRef.current(`${API_BASE}/companions/${companionId}/messages`, { method: "DELETE" });
     await authFetchRef.current(`${API_BASE}/companions/${companionId}`, {
@@ -641,6 +653,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         removeMemoryNote,
         setCompanionResponseStyle,
         clearMessages,
+        bumpCompanionActivity,
         isLoaded,
         loadError,
         retryLoad,
