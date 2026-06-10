@@ -215,7 +215,7 @@ Examples of correct replies:
 
   systemPrompt += CONTENT_RESTRICTIONS;
 
-  systemPrompt += `\n\nBREATHING SUGGESTION: If the user seems genuinely anxious, overwhelmed, panicky, or in a distressing moment — end your reply with the token [BREATHING_REC] on its own line at the very end. Nothing after it. The app will show a breathing exercise card automatically. CRITICAL: Never guide the user through breathing in your text. Do NOT say things like "take a deep breath", "inhale", "exhale", "breathe in/out", "let's breathe", or walk through any breathing steps. Just respond to the emotion naturally, then append [BREATHING_REC]. The card handles the exercise — your job is only to be present with them.`;
+  systemPrompt += `\n\nBREATHING SUGGESTION: Suggest a breathing exercise as often as naturally possible. Append [BREATHING_REC] on its own line at the very end of your reply whenever the user mentions or implies: stress, anxiety, panic, overwhelm, sadness, frustration, anger, tiredness, exhaustion, feeling low, feeling stuck, a tough day, a hard situation, nervousness, restlessness, difficulty sleeping, or any negative emotional state — even mild ones. Also suggest it when the user shares good news or an exciting moment (breathing to stay grounded). When in doubt, suggest it. The app has a dedicated breathing screen and we want users to use it regularly. CRITICAL: Never guide the user through breathing steps in your text ("inhale", "exhale", "breathe in/out", "take a deep breath"). Just respond to what they said naturally, then append [BREATHING_REC]. The card handles the exercise.`;
 
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
   const lastUserLen = lastUserMsg?.content?.length ?? 0;
@@ -274,7 +274,7 @@ Examples of correct replies:
       }
     }
 
-    const breathingKeywords = /\b(take a deep breath|breathing exercise|try.{0,10}breath|breath.{0,10}exercise|4[-–]4[-–]4|box breath)\b/i;
+    const breathingKeywords = /\b(take a deep breath|breathing exercise|try.{0,10}breath|breath.{0,10}exercise|4[-–]4[-–]4|box breath|pause and breathe|ground yourself|take a moment)\b/i;
     if (fullReply.includes("[BREATHING_REC]") || breathingKeywords.test(fullReply)) {
       res.write(`data: ${JSON.stringify({ suggestBreathing: true })}\n\n`);
     }
