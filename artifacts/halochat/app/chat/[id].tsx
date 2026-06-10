@@ -750,10 +750,16 @@ export default function ChatScreen() {
         fullContent = fullContent.replace(/\s*\[BREATHING_REC\]\s*$/, "").trim();
 
         if (suggestBreathing) {
+          const breathingLines: Record<string, string> = {
+            romantic: "hey babe, try this breathing exercise — might help you feel a little better 💕",
+            supportive: "hey, try this breathing exercise — it really might help right now 🌬️",
+            bestfriend: "yo try this breathing exercise, it genuinely helps i promise 😊",
+            uplift: "try this breathing exercise, it'll help you reset and feel good again! 🌬️",
+          };
           const breathingMsg: Message = {
             id: `__breathing__${Date.now()}`,
             role: "assistant",
-            content: "🌬️ A quick breathing exercise might help right now.",
+            content: breathingLines[companion.type] ?? breathingLines.supportive!,
             timestamp: Date.now(),
           };
           setMessages((prev) => [...prev, breathingMsg]);
@@ -1183,12 +1189,19 @@ export default function ChatScreen() {
                     companionAvatarId={companion.avatarId}
                     isNew
                   />
-                  <Pressable
-                    style={[styles.breathingTryBtn, { backgroundColor: companion.avatarGradient[0] }]}
-                    onPress={() => router.push("/activity/breathing" as any)}
-                  >
-                    <Text style={styles.breathingTryBtnText}>Try now</Text>
-                  </Pressable>
+                  <View style={styles.breathingExerciseRow}>
+                    <View style={styles.breathingExerciseInfo}>
+                      <Text style={[styles.breathingExerciseName, { color: colors.mutedForeground }]}>
+                        🌬️ Breathing 4-4-4
+                      </Text>
+                    </View>
+                    <Pressable
+                      style={[styles.breathingTryBtn, { backgroundColor: companion.avatarGradient[0] }]}
+                      onPress={() => router.push("/activity/breathing" as any)}
+                    >
+                      <Text style={styles.breathingTryBtnText}>Try Now</Text>
+                    </Pressable>
+                  </View>
                 </View>
               );
             }
@@ -2134,11 +2147,18 @@ const styles = StyleSheet.create({
   },
   limitWallBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#fff" },
 
-  breathingMsgWrapper: { gap: 6 },
-  breathingTryBtn: {
-    alignSelf: "flex-start",
+  breathingMsgWrapper: { gap: 4 },
+  breathingExerciseRow: {
+    flexDirection: "row",
+    alignItems: "center",
     marginLeft: 52,
-    marginBottom: 4,
+    marginRight: 16,
+    marginBottom: 6,
+    gap: 10,
+  },
+  breathingExerciseInfo: { flex: 1 },
+  breathingExerciseName: { fontSize: 13, fontFamily: "Inter_500Medium" },
+  breathingTryBtn: {
     paddingHorizontal: 16,
     paddingVertical: 7,
     borderRadius: 20,
