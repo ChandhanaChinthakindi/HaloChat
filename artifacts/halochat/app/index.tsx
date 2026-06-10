@@ -131,7 +131,7 @@ function LoadingScreen() {
 
 export default function Index() {
   const { isAuthenticated, isAuthLoading } = useAuth();
-  const { hasOnboarded, isLoaded } = useCompanions();
+  const { hasOnboarded, isLoaded, companions } = useCompanions();
 
   // null = still checking, true = first launch timer running, false = done
   const [minTimePending, setMinTimePending] = useState<boolean | null>(null);
@@ -157,7 +157,9 @@ export default function Index() {
   if (stillLoading) return <LoadingScreen />;
 
   if (!isAuthenticated) return <Redirect href="/auth/login" />;
-  if (!hasOnboarded)    return <Redirect href="/onboarding" />;
+  // Skip onboarding if the user already has companions on the server
+  // (covers the case where the local flag was cleared by a key migration)
+  if (!hasOnboarded && companions.length === 0) return <Redirect href="/onboarding" />;
   return <Redirect href="/(tabs)" />;
 }
 
