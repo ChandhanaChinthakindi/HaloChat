@@ -84,16 +84,18 @@ function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
-async function markDone(type: ActivityType) {
+function uk(userId: string, key: string) { return `${userId}:${key}`; }
+
+async function markDone(userId: string, type: ActivityType) {
   const today = todayKey();
-  await AsyncStorage.setItem(`${STORAGE_PREFIX}${type}_${today}`, "1");
+  await AsyncStorage.setItem(uk(userId, `${STORAGE_PREFIX}${type}_${today}`), "1");
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const yKey = yesterday.toISOString().slice(0, 10);
-  const didYesterday = await AsyncStorage.getItem(`${STORAGE_PREFIX}${type}_${yKey}`);
-  const current = parseInt((await AsyncStorage.getItem(`${STREAK_PREFIX}${type}`)) ?? "0", 10);
+  const didYesterday = await AsyncStorage.getItem(uk(userId, `${STORAGE_PREFIX}${type}_${yKey}`));
+  const current = parseInt((await AsyncStorage.getItem(uk(userId, `${STREAK_PREFIX}${type}`))) ?? "0", 10);
   const newStreak = didYesterday === "1" ? current + 1 : 1;
-  await AsyncStorage.setItem(`${STREAK_PREFIX}${type}`, String(newStreak));
+  await AsyncStorage.setItem(uk(userId, `${STREAK_PREFIX}${type}`), String(newStreak));
 }
 
 // ─── Companion Picker ─────────────────────────────────────────────────────────
@@ -243,7 +245,7 @@ function CheckinActivity({
   onDone: () => void;
 }) {
   const { companions } = useCompanions();
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
   const [selectedCompanion, setSelectedCompanion] = useState<string | null>(companions[0]?.id ?? null);
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [note, setNote] = useState("");
@@ -264,7 +266,7 @@ function CheckinActivity({
         : `I'm feeling ${selectedMood} today.`;
       const reply = await askCompanion(accessToken, companion, msg);
       setResponse(reply);
-      await markDone("checkin");
+      await markDone(user?.id ?? "", "checkin");
       hapticsNotification();
       onDone();
     } catch {
@@ -369,6 +371,7 @@ function BreathingActivity({
   meta: (typeof ACTIVITY_META)[ActivityType];
   onDone: () => void;
 }) {
+  const { user } = useAuth();
   const [phase, setPhase] = useState<"idle" | "countdown" | "inhale" | "hold" | "exhale" | "done">("idle");
   const [cycle, setCycle] = useState(0);
   const [countDown, setCountDown] = useState(0);
@@ -479,7 +482,7 @@ function BreathingActivity({
         cancelAnimation(breathe);
         breathe.value = withTiming(0.2, { duration: 1000 });
         speak("Well done");
-        markDone("breathing");
+        markDone(user?.id ?? "", "breathing");
         hapticsNotification();
         onDone();
         return;
@@ -666,7 +669,7 @@ function JournalActivity({
   onDone: () => void;
 }) {
   const { companions } = useCompanions();
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
   const [selectedCompanion, setSelectedCompanion] = useState<string | null>(companions[0]?.id ?? null);
   const [prompt, setPrompt] = useState<string | null>(null);
   const [loadingPrompt, setLoadingPrompt] = useState(false);
@@ -705,7 +708,7 @@ function JournalActivity({
       const msg = `I journaled today. The prompt was: "${prompt}"\n\nHere's what I wrote:\n${entry.trim()}\n\nPlease respond with warmth and reflection — no more than 3-4 sentences.`;
       const r = await askCompanion(accessToken, companion, msg);
       setReply(r);
-      await markDone("journal");
+      await markDone(user?.id ?? "", "journal");
       hapticsNotification();
       onDone();
     } catch {
@@ -807,7 +810,7 @@ function GratitudeActivity({
   onDone: () => void;
 }) {
   const { companions } = useCompanions();
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
   const [selectedCompanion, setSelectedCompanion] = useState<string | null>(companions[0]?.id ?? null);
   const [items, setItems] = useState(["", "", ""]);
   const [loading, setLoading] = useState(false);
@@ -827,7 +830,7 @@ function GratitudeActivity({
       const msg = `Today I'm grateful for:\n${list}\n\nRespond warmly to my gratitude list in 2-3 sentences. Be genuine, not generic.`;
       const r = await askCompanion(accessToken, companion, msg);
       setReply(r);
-      await markDone("gratitude");
+      await markDone(user?.id ?? "", "gratitude");
       hapticsNotification();
       onDone();
     } catch {

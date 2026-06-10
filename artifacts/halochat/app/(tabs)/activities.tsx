@@ -60,6 +60,7 @@ const ACTIVITIES = [
 
 const DONE_GRADIENT: [string, string] = ["#B8D4BC", "#94C4A8"];
 const STORAGE_PREFIX = "halochat_activity_done_";
+function uk(userId: string, key: string) { return `${userId}:${key}`; }
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -155,7 +156,7 @@ function MoodCard({
   const shareOpacity    = useRef(new Animated.Value(0)).current;
   const shareTranslateY = useRef(new Animated.Value(10)).current;
 
-  const CARD_STATE_KEY = "halochat_mood_card_state";
+  const CARD_STATE_KEY = uk(user?.id ?? "", "halochat_mood_card_state");
 
   const animateQuoteIn = (instant = false) => {
     if (instant) {
@@ -375,6 +376,8 @@ export default function ActivitiesScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const topPadding = Platform.OS === "web" ? 20 : insets.top;
+  const { user } = useAuth();
+  const userId = user?.id ?? "";
   const scrollRef = useRef<ScrollView>(null);
 
   const [doneToday, setDoneToday] = useState<Set<ActivityType>>(new Set());
@@ -389,16 +392,16 @@ export default function ActivitiesScreen() {
 
     await Promise.all(
       ACTIVITIES.map(async ({ type }) => {
-        const doneVal = await AsyncStorage.getItem(`${STORAGE_PREFIX}${type}_${today}`);
+        const doneVal = await AsyncStorage.getItem(uk(userId, `${STORAGE_PREFIX}${type}_${today}`));
         if (doneVal === "1") done.add(type);
-        const streakVal = await AsyncStorage.getItem(`halochat_activity_streak_${type}`);
+        const streakVal = await AsyncStorage.getItem(uk(userId, `halochat_activity_streak_${type}`));
         streakMap[type] = streakVal ? parseInt(streakVal, 10) : 0;
       })
     );
 
     setDoneToday(done);
     setStreaks(streakMap as Record<ActivityType, number>);
-  }, []);
+  }, [userId]);
 
   useEffect(() => { loadCompletions(); }, [loadCompletions]);
 

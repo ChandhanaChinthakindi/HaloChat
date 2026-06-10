@@ -158,18 +158,21 @@ const PIN_PREFIX = "halochat_pin_";
 const TRAITS_PREFIX = "halochat_traits_";
 const RESPONSE_STYLE_PREFIX = "halochat_rs_";
 
-async function loadStreak(id: string): Promise<number> {
+// Scope any storage key to a specific user so accounts on the same device stay isolated.
+function uk(userId: string, key: string) { return `${userId}:${key}`; }
+
+async function loadStreak(userId: string, id: string): Promise<number> {
   try {
-    const raw = await AsyncStorage.getItem(STREAK_PREFIX + id);
+    const raw = await AsyncStorage.getItem(uk(userId, STREAK_PREFIX + id));
     if (!raw) return 0;
     return (JSON.parse(raw) as { days: number }).days;
   } catch { return 0; }
 }
 
-async function touchStreak(id: string): Promise<number> {
+async function touchStreak(userId: string, id: string): Promise<number> {
   try {
     const today = new Date().toISOString().split("T")[0];
-    const raw = await AsyncStorage.getItem(STREAK_PREFIX + id);
+    const raw = await AsyncStorage.getItem(uk(userId, STREAK_PREFIX + id));
     const prev: { days: number; lastDate: string } = raw
       ? JSON.parse(raw)
       : { days: 0, lastDate: "" };
@@ -177,7 +180,7 @@ async function touchStreak(id: string): Promise<number> {
     const yest = new Date();
     yest.setDate(yest.getDate() - 1);
     const newDays = prev.lastDate === yest.toISOString().split("T")[0] ? prev.days + 1 : 1;
-    await AsyncStorage.setItem(STREAK_PREFIX + id, JSON.stringify({ days: newDays, lastDate: today }));
+    await AsyncStorage.setItem(uk(userId, STREAK_PREFIX + id), JSON.stringify({ days: newDays, lastDate: today }));
     return newDays;
   } catch { return 0; }
 }
@@ -253,7 +256,10 @@ interface CompanionContextType {
 const CompanionContext = createContext<CompanionContextType | null>(null);
 
 export function CompanionProvider({ children }: { children: React.ReactNode }) {
-  const { authFetch, isAuthenticated, isAuthLoading } = useAuth();
+  const { authFetch, isAuthenticated, isAuthLoading, user } = useAuth();
+  const userId = user?.id ?? "";
+  const userIdRef = useRef<string>("");
+  userIdRef.current = userId;
   const authFetchRef = useRef(authFetch);
   useEffect(() => { authFetchRef.current = authFetch; }, [authFetch]);
 
@@ -283,8 +289,8 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
     const load = async () => {
       try {
         const [onboarded, storedName] = await Promise.all([
-          AsyncStorage.getItem(ONBOARDED_KEY),
-          AsyncStorage.getItem(USER_NAME_KEY),
+          AsyncStorage.getItem(uk(userId, ONBOARDED_KEY)),
+          AsyncStorage.getItem(uk(userId, USER_NAME_KEY)),
         ]);
         if (onboarded) setHasOnboardedState(true);
         if (storedName) setUserNameState(storedName);
@@ -298,11 +304,11 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
             try {
               const [memRes, streak, pinVal, traitsRaw, avatarIdStored, rsRaw] = await Promise.all([
                 authFetch(`${API_BASE}/companions/${c.id}/memory`),
-                loadStreak(c.id),
-                AsyncStorage.getItem(PIN_PREFIX + c.id),
-                AsyncStorage.getItem(TRAITS_PREFIX + c.id),
-                AsyncStorage.getItem(`halochat_avatar_${c.id}`),
-                AsyncStorage.getItem(RESPONSE_STYLE_PREFIX + c.id),
+                loadStreak(userId, c.id),
+                AsyncStorage.getItem(uk(userId, PIN_PREFIX + c.id)),
+                AsyncStorage.getItem(uk(userId, TRAITS_PREFIX + c.id)),
+                AsyncStorage.getItem(uk(userId, `halochat_avatar_${c.id}`)),
+                AsyncStorage.getItem(uk(userId, RESPONSE_STYLE_PREFIX + c.id)),
               ]);
               const notes: string[] = memRes.ok ? await memRes.json() : [];
               const traits: string[] = traitsRaw ? JSON.parse(traitsRaw) : [];
@@ -328,16 +334,16 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
 
   const setHasOnboarded = useCallback(async (value: boolean) => {
     setHasOnboardedState(value);
-    await AsyncStorage.setItem(ONBOARDED_KEY, value ? "1" : "");
+    await AsyncStorage.setItem(uk(userIdRef.current, ONBOARDED_KEY), value ? "1" : "");
   }, []);
 
   const setUserName = useCallback(async (name: string) => {
     setUserNameState(name);
-    await AsyncStorage.setItem(USER_NAME_KEY, name);
+    await AsyncStorage.setItem(uk(userIdRef.current, USER_NAME_KEY), name);
   }, []);
 
   const setCompanionResponseStyle = useCallback(async (id: string, style: ResponseStyle) => {
-    await AsyncStorage.setItem(RESPONSE_STYLE_PREFIX + id, style);
+    await AsyncStorage.setItem(uk(userIdRef.current, RESPONSE_STYLE_PREFIX + id), style);
     setCompanions((prev) => prev.map((c) => c.id === id ? { ...c, responseStyle: style } : c));
   }, []);
 
@@ -367,11 +373,11 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       const raw = await res.json();
       const savedTraits = traits && traits.length > 0 ? traits : [];
       if (savedTraits.length > 0) {
-        await AsyncStorage.setItem(TRAITS_PREFIX + raw.id, JSON.stringify(savedTraits));
+        await AsyncStorage.setItem(uk(userIdRef.current, TRAITS_PREFIX + raw.id), JSON.stringify(savedTraits));
       }
       // Store avatarId locally — server may or may not persist it yet
       if (avatarId) {
-        await AsyncStorage.setItem(`halochat_avatar_${raw.id}`, avatarId);
+        await AsyncStorage.setItem(uk(userIdRef.current, `halochat_avatar_${raw.id}`), avatarId);
       }
       const companion = { ...dbToCompanion(raw, [], savedTraits), avatarId: avatarId || undefined };
       setCompanions((prev) => [...prev, companion]);
@@ -389,7 +395,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify(apiPatch),
       });
       if (traits !== undefined) {
-        await AsyncStorage.setItem(TRAITS_PREFIX + id, JSON.stringify(traits));
+        await AsyncStorage.setItem(uk(userIdRef.current, TRAITS_PREFIX + id), JSON.stringify(traits));
       }
       setCompanions((prev) =>
         prev.map((c) =>
@@ -413,7 +419,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
       const companion = prev.find((c) => c.id === id);
       if (!companion) return prev;
       const newPinned = !companion.pinned;
-      AsyncStorage.setItem(PIN_PREFIX + id, newPinned ? "1" : "0").catch(() => {});
+      AsyncStorage.setItem(uk(userIdRef.current, PIN_PREFIX + id), newPinned ? "1" : "0").catch(() => {});
       return prev.map((c) => (c.id === id ? { ...c, pinned: newPinned } : c));
     });
   }, []);
@@ -456,7 +462,7 @@ export function CompanionProvider({ children }: { children: React.ReactNode }) {
         const inserted: any[] = res.ok ? await res.json() : [];
         const serverId: string | null = inserted[0]?.id ?? null;
 
-        const newStreak = message.role === "user" ? await touchStreak(companionId) : undefined;
+        const newStreak = message.role === "user" ? await touchStreak(userIdRef.current, companionId) : undefined;
 
         setCompanions((prev) => {
           const updated = prev.map((c) => {

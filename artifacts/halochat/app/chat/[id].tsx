@@ -819,7 +819,7 @@ export default function ChatScreen() {
             const newLevel = Math.min(100, prevLevel + bondPoints);
             const crossed = [20, 40, 60, 80].find((m) => prevLevel < m && newLevel >= m);
             if (crossed !== undefined) {
-              const seenKey = `halochat_milestone_${companion.id}_${crossed}`;
+              const seenKey = `${user?.id ?? ""}:halochat_milestone_${companion.id}_${crossed}`;
               const alreadySeen = await AsyncStorage.getItem(seenKey);
               if (!alreadySeen) {
                 await AsyncStorage.setItem(seenKey, "1");
