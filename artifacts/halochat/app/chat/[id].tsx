@@ -716,7 +716,11 @@ export default function ChatScreen() {
           const body = await response.json().catch(() => ({}));
           throw new Error(body.error === "DAILY_LIMIT_REACHED" ? "DAILY_LIMIT_REACHED" : "RATE_LIMITED");
         }
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) {
+          const errBody = await response.text().catch(() => "");
+          console.error("[chat] HTTP error:", response.status, errBody.slice(0, 300));
+          throw new Error(`HTTP ${response.status}`);
+        }
 
         const reader = response.body?.getReader();
         const decoder = new TextDecoder();
@@ -788,6 +792,7 @@ export default function ChatScreen() {
           Alert.alert("Slow down!", "You're sending too many messages. Wait a moment and try again.", [{ text: "OK" }]);
           return;
         }
+        console.error("[chat] send failed:", err?.message ?? err);
         setRetryContent(userContent);
       } finally {
         setIsStreaming(false);
